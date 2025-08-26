@@ -1,7 +1,18 @@
-import os
 import sys
 import yaml
-import ipaddress
+
+PROJECT_NAME = "tp0"
+SERVER_SERVICE = "server"
+SERVICES_FIELD = "services"
+NETWORK_NAME = "testing_net"
+NETWORK_SUBNET = "172.25.125.0/24"
+
+
+class CoolDumper(yaml.Dumper):
+    def write_line_break(self, data=None):
+        super().write_line_break(data)
+        if len(self.indents) <= 2:
+            super().write_line_break()
 
 
 def error_exit(msg: str):
@@ -32,7 +43,64 @@ def sanitize_clients(n: str) -> int:
 
 
 def generate_docker_compose(file: str, clients: int):
-    print(f"\ngenerating docker-compose for {clients} clients in {file}")
+    compose = base_compose()
+    for i in range(1, clients + 1):
+        client_name = f"client{i}"
+        client = base_client(client_name, i)
+        compose[SERVICES_FIELD][client_name] = client
+
+    print(f"generating docker-compose file for {clients} clients at {file}")
+
+    with open(file, "w") as f:
+        yaml.dump(compose, f, default_flow_style=False, sort_keys=False, Dumper=CoolDumper)
+
+
+def base_server():
+    return {
+        "container_name": SERVER_SERVICE,
+        "image": "server:latest",
+        "entrypoint": "python3 /main.py",
+        "environment": [
+            "PYTHONUNBUFFERED=1",
+            "LOGGING_LEVEL=DEBUG"
+        ],
+        "networks": [NETWORK_NAME]
+    }
+
+
+def base_client(name: str, client_id: int):
+    return {
+        "container_name": name,
+        "image": "client:latest",
+        "entrypoint": "/client",
+        "environment": [
+            f"CLI_ID={client_id}",
+            "CLI_LOG_LEVEL=DEBUG"
+        ],
+        "networks": [NETWORK_NAME],
+        "depends_on": [SERVER_SERVICE]
+    }
+
+
+def base_compose():
+    return {
+        "name": PROJECT_NAME,
+        "services": {
+            SERVER_SERVICE: base_server()
+        },
+        "networks": {
+            NETWORK_NAME: {
+                "ipam": {
+                    "driver": "default",
+                    "config": [
+                        {
+                            "subnet": NETWORK_SUBNET
+                        }
+                    ]
+                }
+            }
+        }
+    }
 
 
 if __name__ == "__main__":
