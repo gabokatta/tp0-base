@@ -1,5 +1,6 @@
 import sys
 import yaml
+import os
 
 PROJECT_NAME = "tp0"
 SERVER_SERVICE = "server"
@@ -67,7 +68,7 @@ def base_server():
             "LOGGING_LEVEL=DEBUG"
         ],
         "volumes": [
-            f"{SERVER_BASE_PATH}/config.ini:./config.ini:ro",
+            f"{os.path.abspath(SERVER_BASE_PATH)}/config.ini:/config.ini:ro",
         ],
         "networks": [NETWORK_NAME]
     }
@@ -83,7 +84,7 @@ def base_client(name: str, client_id: int):
             "CLI_LOG_LEVEL=DEBUG"
         ],
         "volumes": [
-            f"{CLIENT_BASE_PATH}/config.yaml:./config.yaml:ro",
+            f"{os.path.abspath(CLIENT_BASE_PATH)}/config.yaml:/config.yaml:ro",
         ],
         "networks": [NETWORK_NAME],
         "depends_on": [SERVER_SERVICE]
