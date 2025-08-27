@@ -6,6 +6,8 @@ SERVER_SERVICE = "server"
 SERVICES_FIELD = "services"
 NETWORK_NAME = "testing_net"
 NETWORK_SUBNET = "172.25.125.0/24"
+SERVER_BASE_PATH = "./server"
+CLIENT_BASE_PATH = "./client"
 
 
 class CoolDumper(yaml.Dumper):
@@ -64,6 +66,9 @@ def base_server():
             "PYTHONUNBUFFERED=1",
             "LOGGING_LEVEL=DEBUG"
         ],
+        "volumes": [
+            f"{SERVER_BASE_PATH}/config.ini:./config.ini:ro",
+        ],
         "networks": [NETWORK_NAME]
     }
 
@@ -76,6 +81,9 @@ def base_client(name: str, client_id: int):
         "environment": [
             f"CLI_ID={client_id}",
             "CLI_LOG_LEVEL=DEBUG"
+        ],
+        "volumes": [
+            f"{CLIENT_BASE_PATH}/config.yaml:./config.yaml:ro",
         ],
         "networks": [NETWORK_NAME],
         "depends_on": [SERVER_SERVICE]
