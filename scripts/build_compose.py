@@ -68,7 +68,7 @@ def base_server():
             "LOGGING_LEVEL=DEBUG"
         ],
         "volumes": [
-            f"{os.path.abspath(SERVER_BASE_PATH)}/config.ini:/config.ini:ro",
+            f"{os.path.abspath(SERVER_BASE_PATH)}/config.ini:/config.ini",
         ],
         "networks": [NETWORK_NAME]
     }
@@ -84,7 +84,7 @@ def base_client(name: str, client_id: int):
             "CLI_LOG_LEVEL=DEBUG"
         ],
         "volumes": [
-            f"{os.path.abspath(CLIENT_BASE_PATH)}/config.yaml:/config.yaml:ro",
+            f"{os.path.abspath(CLIENT_BASE_PATH)}/config.yaml:/config.yaml",
         ],
         "networks": [NETWORK_NAME],
         "depends_on": [SERVER_SERVICE]
