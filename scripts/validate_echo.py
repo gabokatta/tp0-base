@@ -1,4 +1,5 @@
 import subprocess
+import sys
 
 SUCCESS = "success"
 FAIL = "fail"
@@ -24,6 +25,7 @@ if __name__ == "__main__":
         response = result.stdout.strip()
         print(response)
         print(msg_template(SUCCESS)) if response == MESSAGE else print(msg_template(FAIL))
+        sys.exit(0)
     except Exception as e:
         print(e)
-        exit(1)
+        sys.exit(1)

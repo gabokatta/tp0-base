@@ -1,9 +1,19 @@
 #!/usr/bin/env python3
-
 from configparser import ConfigParser
+from cleanup import Shutdown
 from common.server import Server
+
+import signal
 import logging
 import os
+
+
+def set_shutdown_signals(handler: Shutdown):
+    """
+    Given the ShutdownHandler, registers the triggers for SIGTERM and SIGINT.
+    """
+    signal.signal(signal.SIGTERM, handler.trigger)
+    signal.signal(signal.SIGINT, handler.trigger)
 
 
 def initialize_config():
@@ -24,7 +34,9 @@ def initialize_config():
     config_params = {}
     try:
         config_params["port"] = int(os.getenv('SERVER_PORT', config["DEFAULT"]["SERVER_PORT"]))
-        config_params["listen_backlog"] = int(os.getenv('SERVER_LISTEN_BACKLOG', config["DEFAULT"]["SERVER_LISTEN_BACKLOG"]))
+        config_params["listen_backlog"] = int(
+            os.getenv('SERVER_LISTEN_BACKLOG', config["DEFAULT"]["SERVER_LISTEN_BACKLOG"])
+        )
         config_params["logging_level"] = os.getenv('LOGGING_LEVEL', config["DEFAULT"]["LOGGING_LEVEL"])
     except KeyError as e:
         raise KeyError("Key was not found. Error: {} .Aborting server".format(e))
@@ -49,7 +61,9 @@ def main():
 
     # Initialize server and start server loop
     server = Server(port, listen_backlog)
+    set_shutdown_signals(Shutdown(server))
     server.run()
+
 
 def initialize_log(logging_level):
     """
