@@ -39,8 +39,8 @@ def sanitize_clients(n: str) -> int:
 
     parsed = int(n)
 
-    if parsed < 1:
-        error_exit("invalid number of clients, must be greater than 0")
+    if parsed < 0:
+        error_exit("invalid number of clients, must be positive integer")
 
     return parsed
 
