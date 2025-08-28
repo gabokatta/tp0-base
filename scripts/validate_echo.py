@@ -3,7 +3,7 @@ import subprocess
 SUCCESS = "success"
 FAIL = "fail"
 ACTION = "test_echo_server"
-NETWORK = "tp0_net"
+NETWORK = "tp0_testing_net"
 
 SERVER_HOST = "server"
 SERVER_PORT = "12345"

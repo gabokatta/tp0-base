@@ -5,7 +5,7 @@ import os
 PROJECT_NAME = "tp0"
 SERVER_SERVICE = "server"
 SERVICES_FIELD = "services"
-NETWORK_NAME = "tp0_net"
+NETWORK_NAME = "testing_net"
 NETWORK_SUBNET = "172.25.125.0/24"
 SERVER_BASE_PATH = "./server"
 CLIENT_BASE_PATH = "./client"
@@ -97,7 +97,6 @@ def base_compose():
         },
         "networks": {
             NETWORK_NAME: {
-                "name": NETWORK_NAME,
                 "ipam": {
                     "driver": "default",
                     "config": [
