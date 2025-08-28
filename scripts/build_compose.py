@@ -64,8 +64,7 @@ def base_server():
         "image": "server:latest",
         "entrypoint": "python3 /main.py",
         "environment": [
-            "PYTHONUNBUFFERED=1",
-            "LOGGING_LEVEL=DEBUG"
+            "PYTHONUNBUFFERED=1"
         ],
         "volumes": [
             f"{os.path.abspath(SERVER_BASE_PATH)}/config.ini:/config.ini",
@@ -80,8 +79,7 @@ def base_client(name: str, client_id: int):
         "image": "client:latest",
         "entrypoint": "/client",
         "environment": [
-            f"CLI_ID={client_id}",
-            "CLI_LOG_LEVEL=DEBUG"
+            f"CLI_ID={client_id}"
         ],
         "volumes": [
             f"{os.path.abspath(CLIENT_BASE_PATH)}/config.yaml:/config.yaml",
