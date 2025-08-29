@@ -178,3 +178,142 @@ Se espera que se redacte una sección del README en donde se indique cómo ejecu
 Se proveen [pruebas automáticas](https://github.com/7574-sistemas-distribuidos/tp0-tests) de caja negra. Se exige que la resolución de los ejercicios pase tales pruebas, o en su defecto que las discrepancias sean justificadas y discutidas con los docentes antes del día de la entrega. El incumplimiento de las pruebas es condición de desaprobación, pero su cumplimiento no es suficiente para la aprobación. Respetar las entradas de log planteadas en los ejercicios, pues son las que se chequean en cada uno de los tests.
 
 La corrección personal tendrá en cuenta la calidad del código entregado y casos de error posibles, se manifiesten o no durante la ejecución del trabajo práctico. Se pide a los alumnos leer atentamente y **tener en cuenta** los criterios de corrección informados  [en el campus](https://campusgrado.fi.uba.ar/mod/page/view.php?id=73393).
+
+# Implementación de Ejercicios
+
+En esta sección se describirán las decisiones de diseño de cada uno de los ejercicios de manera incremental y además se describiran aquellos cambios importantes que se realizaron a la estructura base del TP.
+
+## Ejercicio N°1: Script para generar DockerCompose
+
+### Diseño de la solucion:
+
+Se opto por usar python como lenguaje de scripting para el generador, esto por comodidad y flexibilidad para construir los archivos YAML.
+
+Usando como inspiración el docker-compose original presente en el esqueleto del TP, el script busca la construcción dinámica de los clientes.
+
+```
+bash generar-compose.sh <nombre-de-archivo.yaml> <n_clientes>
+```
+
+El script de bash ([generar-compose.sh](generar-compose.sh)) por debajo llama a Python y ejecuta al de python ([build_compose.py](scripts/build_compose.py)).
+
+El mismo cuenta con las siguientes caracteristicas:
+
+- Dumper YAML customizado para mejorar el espaciado a preferencia.
+
+```python
+class CoolDumper(yaml.Dumper):
+    def write_line_break(self, data=None):
+        super().write_line_break(data)
+        if len(self.indents) <= 2:
+            super().write_line_break()
+
+# y se usa de esta manera como optional param.
+with open(file, "w") as f:
+ yaml.dump(compose, f, default_flow_style=False, sort_keys=False, Dumper=CoolDumper)
+```
+
+- Sanitizado de los parametros de ejecución.
+
+```python
+def sanitize_filename(file: str) -> str:
+    if len(file) == 0:
+        error_exit("filename cannot be an empty string")
+
+    if not file.endswith(".yaml"):
+        error_exit("invalid file extension, dockerfile must end with .yaml")
+
+    return file
+```
+```python
+def sanitize_clients(n: str) -> int:
+    if not n.isnumeric():
+        error_exit("invalid client number, must be an integer")
+
+    parsed = int(n)
+
+    if parsed < 1:
+        error_exit("invalid number of clients, must be greater than 0")
+
+    return parsed
+```
+
+- Uso de las estructuras default como base para la generación de servicios.
+
+```python
+def base_server():
+    return {
+        "container_name": SERVER_SERVICE,
+        "image": "server:latest",
+        "entrypoint": "python3 /main.py",
+        "environment": [
+            "PYTHONUNBUFFERED=1",
+            "LOGGING_LEVEL=DEBUG"
+        ],
+        "networks": [NETWORK_NAME]
+    }
+```
+
+```python
+def base_client(name: str, client_id: int):
+ return {
+  "container_name": name,
+  "image": "client:latest",
+  "entrypoint": "/client",
+  "environment": [
+   f"CLI_ID={client_id}",
+   "CLI_LOG_LEVEL=DEBUG"
+  ],
+  "networks": [NETWORK_NAME],
+  "depends_on": [SERVER_SERVICE]
+ }
+```
+
+```python
+def base_compose():
+ return {
+  "name": PROJECT_NAME,
+  "services": {
+   SERVER_SERVICE: base_server()
+  },
+  "networks": {
+   NETWORK_NAME: {
+    "ipam": {
+     "driver": "default",
+     "config": [
+      {
+       "subnet": NETWORK_SUBNET
+      }
+     ]
+    }
+   }
+  }
+ }
+```
+
+### Requisitos de ejecución:
+
+> [!WARNING]
+> Los siguientes requerimientos son consecuencia de haber elegido Python como lenguaje de scripting, seguir las instrucciones para el correcto funcionamiento del ejercicio.
+
+#### Generación de Ambiente Virtual (Python)
+
+Realizar este paso en la raiz del TP.
+
+```
+python3 -m venv venv
+```
+
+#### Instalación de Requirements (Pip)
+
+Este paso en particular es requerido para ASEGURAR que cuentes con la dependencia para el manejo de archivos YAML.
+
+```
+pip install -r requirements.txt
+```
+
+_por si olvidas hacer este paso, igual fue incluido como paso previo a la invocación del script..._
+
+
+> [!TIP]
+> En una branch futura esto fue automatizado para asegurar compatibilidad en multiples ambientes ;)
