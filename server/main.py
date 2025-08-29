@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from configparser import ConfigParser
-from cleanup import Shutdown
+from common.cleanup import Shutdown
 from common.server import Server
 
 import signal

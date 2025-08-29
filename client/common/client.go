@@ -22,14 +22,16 @@ type ClientConfig struct {
 // Client Entity that encapsulates how
 type Client struct {
 	config ClientConfig
+	signal *SignalHandler
 	conn   net.Conn
 }
 
 // NewClient Initializes a new client receiving the configuration
-// as a parameter
+// and the signal handler as parameters.
 func NewClient(config ClientConfig) *Client {
 	client := &Client{
 		config: config,
+		signal: NewSignalHandler(),
 	}
 	return client
 }
@@ -45,6 +47,7 @@ func (c *Client) createClientSocket() error {
 			c.config.ID,
 			err,
 		)
+		return err
 	}
 	c.conn = conn
 	return nil
@@ -52,11 +55,21 @@ func (c *Client) createClientSocket() error {
 
 // StartClientLoop Send messages to the client until some time threshold is met
 func (c *Client) StartClientLoop() {
+	defer c.cleanup()
 	// There is an autoincremental msgID to identify every message sent
 	// Messages if the message amount threshold has not been surpassed
 	for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
+		if c.signal.shouldShutdown() {
+			log.Infof("action: shutdown_requested | result: success | client_id: %v | completed_messages: %v",
+				c.config.ID,
+				msgID-1)
+			return
+		}
+
 		// Create the connection the server in every loop iteration. Send an
-		c.createClientSocket()
+		if err := c.createClientSocket(); err != nil {
+			return
+		}
 
 		// TODO: Modify the send to avoid short-write
 		fmt.Fprintf(
@@ -86,4 +99,13 @@ func (c *Client) StartClientLoop() {
 
 	}
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
+}
+
+func (c *Client) cleanup() {
+	if c.signal != nil {
+		c.signal.Cleanup()
+	}
+	// todo: for now, i have no need for other file descriptors to be closed since (for some reason)
+	// 	the base client closes the connection after each communication (lmao?)
+	// 	so this method will be improved on when shifting to a more complex client logic.
 }

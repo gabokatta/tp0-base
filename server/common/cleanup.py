@@ -1,6 +1,6 @@
 import logging
 
-from server import Server
+from common.server import Server
 
 
 class Shutdown:

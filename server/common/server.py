@@ -1,8 +1,6 @@
 import socket
 import logging
 
-CONNECTION_WAIT_TIME = 1.0
-
 
 class Server:
 
@@ -10,8 +8,7 @@ class Server:
         # Initialize server socket
         self._alive = True
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._server_socket.settimeout(CONNECTION_WAIT_TIME)
-        self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._client_socket = None
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
 
@@ -25,17 +22,16 @@ class Server:
         """
         while self._alive:
             try:
-                client_sock = self.__accept_new_connection()
-                Server.__handle_client_connection(client_sock)
-            except socket.timeout:
-                continue
+                self._client_socket = self.__accept_new_connection()
+                self.__handle_client_connection()
             except OSError as e:
                 if self._alive:
                     logging.error(f"action: accept_connection | result: fail | error: {e}")
-        self._cleanup()
 
-    @staticmethod
-    def __handle_client_connection(client_sock):
+        self._cleanup()
+        logging.error(f'action: graceful_shutdown | result: success')
+
+    def __handle_client_connection(self):
         """
         Read message from a specific client socket and closes the socket
 
@@ -44,15 +40,15 @@ class Server:
         """
         try:
             # TODO: Modify the receive to avoid short-reads
-            msg = client_sock.recv(1024).rstrip().decode('utf-8')
-            addr = client_sock.getpeername()
+            msg = self._client_socket.recv(1024).rstrip().decode('utf-8')
+            addr = self._client_socket.getpeername()
             logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {msg}')
             # TODO: Modify the send to avoid short-writes
-            client_sock.send("{}\n".format(msg).encode('utf-8'))
+            self._client_socket.send("{}\n".format(msg).encode('utf-8'))
         except OSError as e:
             logging.error(f"action: receive_message | result: fail | error: {e}")
         finally:
-            client_sock.close()
+            self._client_socket.close()
 
     def __accept_new_connection(self):
         """
@@ -70,10 +66,13 @@ class Server:
 
     def _cleanup(self):
         try:
+            if self._client_socket:
+                self._client_socket.close()
+                logging.info('action: client_socket_shutdown | result: success')
             self._server_socket.close()
-            logging.info('action: graceful_shutdown | result: success')
+            logging.info('action: server_socket_shutdown | result: success')
         except OSError as e:
-            logging.error(f'action: server_socket_shutdown | result: fail | error: {e}')
+            logging.error(f'action: graceful_shutdown | result: fail | error: {e}')
 
     def shutdown(self):
         logging.info('action: graceful_shutdown | result: in_progress')
