@@ -195,7 +195,7 @@ Usando como inspiración el docker-compose original presente en el esqueleto del
 bash generar-compose.sh <nombre-de-archivo.yaml> <n_clientes>
 ```
 
-El script de bash por debajo llama a Python y ejecuta  [build_compose.py](scripts/build_compose.py).
+El script de bash ([generar-compose.sh](generar-compose.sh)) por debajo llama a Python y ejecuta al de python ([build_compose.py](scripts/build_compose.py)).
 
 El mismo cuenta con las siguientes caracteristicas:
 
