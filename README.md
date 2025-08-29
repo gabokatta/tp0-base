@@ -196,6 +196,7 @@ En esta sección se describirán las decisiones de diseño de cada uno de los ej
 
 ## Ejercicio N°1: Script para generar DockerCompose
 
+---
 ### Diseño de la solucion:
 
 Se opto por usar python como lenguaje de scripting para el generador, esto por comodidad y flexibilidad para construir los archivos YAML.
@@ -305,6 +306,7 @@ def base_compose():
 ### Requisitos de ejecución:
 
 > [!WARNING]
+> 
 > Los siguientes requerimientos son consecuencia de haber elegido Python como lenguaje de scripting, seguir las instrucciones para el correcto funcionamiento del ejercicio.
 
 #### Generación de Ambiente Virtual (Python)
@@ -327,6 +329,91 @@ _por si olvidas hacer este paso, igual fue incluido como paso previo a la invoca
 
 
 > [!TIP]
+> 
 > En una branch futura esto fue automatizado para asegurar compatibilidad en multiples ambientes ;)
 
-## Ejercicio N°2: Script para generar DockerCompose
+## Ejercicio N°2: Uso de Mounts para Configs
+
+----
+
+<h4 align='center'>[diff - ej1](https://github.com/gabokatta/tp0-base/compare/ej1...gabokatta:tp0-base:ej2?expand=1)</h4>
+
+---
+
+En este ejercicio se hicieron pequeños (_pero importantes_) cambios a el script de generación del docker-compose.
+
+Primero, antes de implementar algun cambio, se tomó la decisión de ir a los Dockerfile de las imagenes y eliminar el COPY de los archivos de configuración, esto para demostrar y confirmar el correcto funcionamiento de mi implementación y reforzar el objetivo del ejercicio.
+
+```dockerfile
+# SNIPPET DEL CLIENT
+FROM busybox:latest
+COPY --from=builder /build/bin/client /client
+COPY ./client/config.yaml /config.yaml
+# COPY ./client/config.yaml /config.yaml -- commented to prove mount working.
+ENTRYPOINT ["/bin/sh"]
+```
+
+```dockerfile
+# SNIPPET DEL SERVER
+FROM python:3.9.7-slim
+COPY server /
+# proof of mount working.
+RUN rm -f /config.ini
+# proof of mount working.
+RUN python -m unittest tests/test_common.py
+ENTRYPOINT ["/bin/sh"]
+```
+
+### Diseño de la Solución
+
+Se modificó el [build_compose.py](scripts/build_compose.py) para hacer uso de volumenes sobre el archivo de configuración correspondiente a el servicio.
+
+- SERVER
+
+Usando como raiz la carpeta del server, se crea un mount de el archivo `config.ini` y se deja en la raiz del servicio.
+
+```python
+def base_server():
+    return {
+        # ...
+        "volumes": [
+            f"{os.path.abspath(SERVER_BASE_PATH)}/config.ini:/config.ini",
+        ],
+        # ...
+    }
+```
+
+- CLIENT
+
+Usando como raiz la carpeta del cliente, se crea un mount de el archivo `config.yaml` y se deja en la raiz del servicio.
+
+```python
+def base_client(name: str, client_id: int):
+    return {
+        # ....
+        "volumes": [
+            f"{os.path.abspath(CLIENT_BASE_PATH)}/config.yaml:/config.yaml",
+        ],
+        # ....
+    }
+```
+
+### Troubleshooting Realizado
+
+> [!CAUTION]
+> 
+>Al momento de ejecutar las pruebas de este ejercicio me topé con que los mismos fallaban ya que una variable de entorno que originaba del script/docker-compose original entraba en conflicto con lo que el archivo de config de los tests esperaba.
+
+Tras indagar en el código del server se puede encontrar el siguiente snippet:
+
+```python
+    # ...
+    try:
+        config_params["port"] = int(os.getenv('SERVER_PORT', config["DEFAULT"]["SERVER_PORT"]))
+        config_params["listen_backlog"] = int(os.getenv('SERVER_LISTEN_BACKLOG', config["DEFAULT"]["SERVER_LISTEN_BACKLOG"]))
+        config_params["logging_level"] = os.getenv('LOGGING_LEVEL', config["DEFAULT"]["LOGGING_LEVEL"])
+    # ...
+```
+
+Al momento de leer las configuraciones, el server le da prioridad a las variables de entorno. Es por esto que decidí retirarlas de mi script generador, esto lo pueden observar en el diff entre los ejercicios.
+
