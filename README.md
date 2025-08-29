@@ -317,3 +317,5 @@ _por si olvidas hacer este paso, igual fue incluido como paso previo a la invoca
 
 > [!TIP]
 > En una branch futura esto fue automatizado para asegurar compatibilidad en multiples ambientes ;)
+
+## Ejercicio N°2: Script para generar DockerCompose
