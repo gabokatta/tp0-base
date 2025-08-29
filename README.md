@@ -198,7 +198,7 @@ En esta sección se describirán las decisiones de diseño de cada uno de los ej
 
 ----
 
-<h4 align='center'>[diff - master](https://github.com/gabokatta/tp0-base/compare/master...gabokatta:tp0-base:ej1?expand=1)</h4>
+<h4 align="center"><a href="https://github.com/gabokatta/tp0-base/compare/master...gabokatta:tp0-base:ej1?expand=1">diff - master</a></h4>
 
 ---
 
@@ -341,7 +341,7 @@ _por si olvidas hacer este paso, igual fue incluido como paso previo a la invoca
 
 ----
 
-<h4 align='center'>[diff - ej1](https://github.com/gabokatta/tp0-base/compare/ej1...gabokatta:tp0-base:ej2?expand=1)</h4>
+<h4 align="center"><a href="https://github.com/gabokatta/tp0-base/compare/ej1...gabokatta:tp0-base:ej2?expand=1">diff - ej1</a></h4>
 
 ---
 
