@@ -422,3 +422,59 @@ Tras indagar en el código del server se puede encontrar el siguiente snippet:
 
 Al momento de leer las configuraciones, el server le da prioridad a las variables de entorno. Es por esto que decidí retirarlas de mi script generador, esto lo pueden observar en el diff entre los ejercicios.
 
+## Ejercicio N°3: Validar Echo Server
+
+----
+
+<h4 align="center"><a href="https://github.com/gabokatta/tp0-base/compare/ej2...gabokatta:tp0-base:ej3?expand=1">diff - ej2</a></h4>
+
+---
+
+### Cambios a Scripts Previos
+
+- Validaciones
+
+Se modificó una de las validaciones en el script de generacion de docker-compose, previamente buscabamos que el número sea un entero mayor que 0, ahora los test requieren poder crear 0 clientes.
+
+```python
+    #ANTES
+    if parsed < 1:
+        error_exit("invalid number of clients, must be greater than 0")
+
+    #AHORA  
+    if parsed < 0:
+        error_exit("invalid number of clients, must be positive integer")
+```
+
+- Manejo de dependencias
+
+Se creó un nuevo script llamado [py_env_check.sh](scripts/py_env_check.sh) el cual corre antes de todos los scripts de python del TP, este se asegura que cuentes con:
+
+1. El entorno virtual de python.
+2. Las dependencias dentro de `requirements.txt`
+
+### Diseño de la Solución
+
+Se tomó la decisión de realizar el script de validación del echo-server nuevamente en Python, no por algun tema en particular si no para estar en sintonia con el script previamente realizado.
+
+Este ejercicio pedia que haciendo uso de `netcat` _FUERA_ de la `host-machine` enviemos un mensaje al servidor y corroborar que el mismo nos haga el echo.
+
+Para esto se usó los siguientes comandos:
+
+```python
+NETCAT_COMMAND = f'echo "{MESSAGE}" | nc {SERVER_HOST} {SERVER_PORT}'
+DOCKER_COMMAND = f"docker run --rm --network {NETWORK} busybox:latest /bin/sh -c '{NETCAT_COMMAND}'"
+```
+
+> Esto esta todo en el script [validar-echo-server.sh](validar-echo-server.sh) que a su vez invoca a [validate_echo.py](scripts/validate_echo.py)
+
+Y a continuación se explicara el razonamiento detras de cada componente:
+
+- `docker run`: permite la ejecución de un _nuevo_ contenedor, permitiendonos spawnear rapidamente el proceso que necesitamos sin mucho setup.
+- `--rm`: flag que indica que el contenedor generado debe eliminarse tras culminar su ejecución.
+- `--network`: simple flag que permite decir el nombre de la network donde se debe operar, es este que nos permite comunicarnos directamente entre los contenedores sin necesidad de tener netcat en la `host-machine`.
+- `busybox:latest`: tomando inspiración del [Dockerfile del Client](client/Dockerfile) hago uso de una ligera imagen de linux para usar el netcat que incluye.
+
+El resto son los comandos requeridos para ejecutar el propio comando de netcat ya dentro de la nueva imagen.
+
+
