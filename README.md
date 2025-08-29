@@ -4,6 +4,17 @@ En el presente repositorio se provee un esqueleto básico de cliente/servidor, e
 
  El cliente (Golang) y el servidor (Python) fueron desarrollados en diferentes lenguajes simplemente para mostrar cómo dos lenguajes de programación pueden convivir en el mismo proyecto con la ayuda de containers, en este caso utilizando [Docker Compose](https://docs.docker.com/compose/).
 
+---
+
+## Resolución de Ejercicios
+
+Al final de este documento se encuentran las soluciones a cada ejercicio, usa el [siguiente link](#implementación-de-ejercicios) para ir directo a esta sección!
+
+_NOTA: Se hace uso de algunas features de markdown exclusivas a Github, recomiendo leerlo en esa dicha plataforma ;)_
+
+
+---
+
 ## Instrucciones de uso
 El repositorio cuenta con un **Makefile** que incluye distintos comandos en forma de targets. Los targets se ejecutan mediante la invocación de:  **make \<target\>**. Los target imprescindibles para iniciar y detener el sistema son **docker-compose-up** y **docker-compose-down**, siendo los restantes targets de utilidad para el proceso de depuración.
 
@@ -178,3 +189,236 @@ Se espera que se redacte una sección del README en donde se indique cómo ejecu
 Se proveen [pruebas automáticas](https://github.com/7574-sistemas-distribuidos/tp0-tests) de caja negra. Se exige que la resolución de los ejercicios pase tales pruebas, o en su defecto que las discrepancias sean justificadas y discutidas con los docentes antes del día de la entrega. El incumplimiento de las pruebas es condición de desaprobación, pero su cumplimiento no es suficiente para la aprobación. Respetar las entradas de log planteadas en los ejercicios, pues son las que se chequean en cada uno de los tests.
 
 La corrección personal tendrá en cuenta la calidad del código entregado y casos de error posibles, se manifiesten o no durante la ejecución del trabajo práctico. Se pide a los alumnos leer atentamente y **tener en cuenta** los criterios de corrección informados  [en el campus](https://campusgrado.fi.uba.ar/mod/page/view.php?id=73393).
+
+# Implementación de Ejercicios
+
+En esta sección se describirán las decisiones de diseño de cada uno de los ejercicios de manera incremental y además se describiran aquellos cambios importantes que se realizaron a la estructura base del TP.
+
+## Ejercicio N°1: Script para generar DockerCompose
+
+----
+
+<h4 align="center"><a href="https://github.com/gabokatta/tp0-base/compare/master...gabokatta:tp0-base:ej1?expand=1">diff - master</a></h4>
+
+---
+
+### Diseño de la solucion:
+
+Se opto por usar python como lenguaje de scripting para el generador, esto por comodidad y flexibilidad para construir los archivos YAML.
+
+Usando como inspiración el docker-compose original presente en el esqueleto del TP, el script busca la construcción dinámica de los clientes.
+
+```
+bash generar-compose.sh <nombre-de-archivo.yaml> <n_clientes>
+```
+
+El script de bash ([generar-compose.sh](generar-compose.sh)) por debajo llama a Python y ejecuta al de python ([build_compose.py](scripts/build_compose.py)).
+
+El mismo cuenta con las siguientes caracteristicas:
+
+- Dumper YAML customizado para mejorar el espaciado a preferencia.
+
+```python
+class CoolDumper(yaml.Dumper):
+    def write_line_break(self, data=None):
+        super().write_line_break(data)
+        if len(self.indents) <= 2:
+            super().write_line_break()
+
+# y se usa de esta manera como optional param.
+with open(file, "w") as f:
+ yaml.dump(compose, f, default_flow_style=False, sort_keys=False, Dumper=CoolDumper)
+```
+
+- Sanitizado de los parametros de ejecución.
+
+```python
+def sanitize_filename(file: str) -> str:
+    if len(file) == 0:
+        error_exit("filename cannot be an empty string")
+
+    if not file.endswith(".yaml"):
+        error_exit("invalid file extension, dockerfile must end with .yaml")
+
+    return file
+```
+```python
+def sanitize_clients(n: str) -> int:
+    if not n.isnumeric():
+        error_exit("invalid client number, must be an integer")
+
+    parsed = int(n)
+
+    if parsed < 1:
+        error_exit("invalid number of clients, must be greater than 0")
+
+    return parsed
+```
+
+- Uso de las estructuras default como base para la generación de servicios.
+
+```python
+def base_server():
+    return {
+        "container_name": SERVER_SERVICE,
+        "image": "server:latest",
+        "entrypoint": "python3 /main.py",
+        "environment": [
+            "PYTHONUNBUFFERED=1",
+            "LOGGING_LEVEL=DEBUG"
+        ],
+        "networks": [NETWORK_NAME]
+    }
+```
+
+```python
+def base_client(name: str, client_id: int):
+ return {
+  "container_name": name,
+  "image": "client:latest",
+  "entrypoint": "/client",
+  "environment": [
+   f"CLI_ID={client_id}",
+   "CLI_LOG_LEVEL=DEBUG"
+  ],
+  "networks": [NETWORK_NAME],
+  "depends_on": [SERVER_SERVICE]
+ }
+```
+
+```python
+def base_compose():
+ return {
+  "name": PROJECT_NAME,
+  "services": {
+   SERVER_SERVICE: base_server()
+  },
+  "networks": {
+   NETWORK_NAME: {
+    "ipam": {
+     "driver": "default",
+     "config": [
+      {
+       "subnet": NETWORK_SUBNET
+      }
+     ]
+    }
+   }
+  }
+ }
+```
+
+### Requisitos de ejecución:
+
+> [!WARNING]
+> 
+> Los siguientes requerimientos son consecuencia de haber elegido Python como lenguaje de scripting, seguir las instrucciones para el correcto funcionamiento del ejercicio.
+
+#### Generación de Ambiente Virtual (Python)
+
+Realizar este paso en la raiz del TP.
+
+```
+python3 -m venv venv
+```
+
+#### Instalación de Requirements (Pip)
+
+Este paso en particular es requerido para ASEGURAR que cuentes con la dependencia para el manejo de archivos YAML.
+
+```
+pip install -r requirements.txt
+```
+
+_por si olvidas hacer este paso, igual fue incluido como paso previo a la invocación del script..._
+
+
+> [!TIP]
+> 
+> En una branch futura esto fue automatizado para asegurar compatibilidad en multiples ambientes ;)
+
+## Ejercicio N°2: Uso de Mounts para Configs
+
+----
+
+<h4 align="center"><a href="https://github.com/gabokatta/tp0-base/compare/ej1...gabokatta:tp0-base:ej2?expand=1">diff - ej1</a></h4>
+
+---
+
+En este ejercicio se hicieron pequeños (_pero importantes_) cambios a el script de generación del docker-compose.
+
+Primero, antes de implementar algun cambio, se tomó la decisión de ir a los Dockerfile de las imagenes y eliminar el COPY de los archivos de configuración, esto para demostrar y confirmar el correcto funcionamiento de mi implementación y reforzar el objetivo del ejercicio.
+
+```dockerfile
+# SNIPPET DEL CLIENT
+FROM busybox:latest
+COPY --from=builder /build/bin/client /client
+COPY ./client/config.yaml /config.yaml
+# COPY ./client/config.yaml /config.yaml -- commented to prove mount working.
+ENTRYPOINT ["/bin/sh"]
+```
+
+```dockerfile
+# SNIPPET DEL SERVER
+FROM python:3.9.7-slim
+COPY server /
+# proof of mount working.
+RUN rm -f /config.ini
+# proof of mount working.
+RUN python -m unittest tests/test_common.py
+ENTRYPOINT ["/bin/sh"]
+```
+
+### Diseño de la Solución
+
+Se modificó el [build_compose.py](scripts/build_compose.py) para hacer uso de volumenes sobre el archivo de configuración correspondiente a el servicio.
+
+- SERVER
+
+Usando como raiz la carpeta del server, se crea un mount de el archivo `config.ini` y se deja en la raiz del servicio.
+
+```python
+def base_server():
+    return {
+        # ...
+        "volumes": [
+            f"{os.path.abspath(SERVER_BASE_PATH)}/config.ini:/config.ini",
+        ],
+        # ...
+    }
+```
+
+- CLIENT
+
+Usando como raiz la carpeta del cliente, se crea un mount de el archivo `config.yaml` y se deja en la raiz del servicio.
+
+```python
+def base_client(name: str, client_id: int):
+    return {
+        # ....
+        "volumes": [
+            f"{os.path.abspath(CLIENT_BASE_PATH)}/config.yaml:/config.yaml",
+        ],
+        # ....
+    }
+```
+
+### Troubleshooting Realizado
+
+> [!CAUTION]
+> 
+>Al momento de ejecutar las pruebas de este ejercicio me topé con que los mismos fallaban ya que una variable de entorno que originaba del script/docker-compose original entraba en conflicto con lo que el archivo de config de los tests esperaba.
+
+Tras indagar en el código del server se puede encontrar el siguiente snippet:
+
+```python
+    # ...
+    try:
+        config_params["port"] = int(os.getenv('SERVER_PORT', config["DEFAULT"]["SERVER_PORT"]))
+        config_params["listen_backlog"] = int(os.getenv('SERVER_LISTEN_BACKLOG', config["DEFAULT"]["SERVER_LISTEN_BACKLOG"]))
+        config_params["logging_level"] = os.getenv('LOGGING_LEVEL', config["DEFAULT"]["LOGGING_LEVEL"])
+    # ...
+```
+
+Al momento de leer las configuraciones, el server le da prioridad a las variables de entorno. Es por esto que decidí retirarlas de mi script generador, esto lo pueden observar en el diff entre los ejercicios.
+
