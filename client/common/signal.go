@@ -35,7 +35,7 @@ func (sh *SignalHandler) listen() {
 	sh.cancel()
 }
 
-func (sh *SignalHandler) shouldShutdown() bool {
+func (sh *SignalHandler) ShouldShutdown() bool {
 	select {
 	case <-sh.ctx.Done():
 		return true

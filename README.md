@@ -330,7 +330,7 @@ Este paso en particular es requerido para ASEGURAR que cuentes con la dependenci
 pip install -r requirements.txt
 ```
 
-_por si olvidas hacer este paso, igual fue incluido como paso previo a la invocación del script..._
+_Por si olvidas hacer este paso, igual fue incluido como paso previo a la invocación del script..._
 
 
 > [!TIP]
@@ -345,9 +345,9 @@ _por si olvidas hacer este paso, igual fue incluido como paso previo a la invoca
 
 ---
 
-En este ejercicio se hicieron pequeños (_pero importantes_) cambios a el script de generación del docker-compose.
+En este ejercicio se hicieron pequeños (_pero importantes_) cambios al script de generación del docker-compose.
 
-Primero, antes de implementar algun cambio, se tomó la decisión de ir a los Dockerfile de las imagenes y eliminar el COPY de los archivos de configuración, esto para demostrar y confirmar el correcto funcionamiento de mi implementación y reforzar el objetivo del ejercicio.
+Primero, antes de implementar algún cambio, se tomó la decisión de ir a los Dockerfile de las imagenes y eliminar el COPY de los archivos de configuración, esto para demostrar y confirmar el correcto funcionamiento de mi implementación y reforzar el objetivo del ejercicio.
 
 ```dockerfile
 # SNIPPET DEL CLIENT
@@ -371,11 +371,11 @@ ENTRYPOINT ["/bin/sh"]
 
 ### Diseño de la Solución
 
-Se modificó el [build_compose.py](scripts/build_compose.py) para hacer uso de volumenes sobre el archivo de configuración correspondiente a el servicio.
+Se modificó el [build_compose.py](scripts/build_compose.py) para hacer uso de volumenes sobre el archivo de configuración correspondiente al servicio.
 
 - SERVER
 
-Usando como raiz la carpeta del server, se crea un mount de el archivo `config.ini` y se deja en la raiz del servicio.
+Usando como raiz la carpeta del server, se crea un mount del archivo `config.ini` y se deja en la raiz del servicio.
 
 ```python
 def base_server():
@@ -390,7 +390,7 @@ def base_server():
 
 - CLIENT
 
-Usando como raiz la carpeta del cliente, se crea un mount de el archivo `config.yaml` y se deja en la raiz del servicio.
+Usando como raiz la carpeta del cliente, se crea un mount del archivo `config.yaml` y se deja en la raiz del servicio.
 
 ```python
 def base_client(name: str, client_id: int):
@@ -407,7 +407,7 @@ def base_client(name: str, client_id: int):
 
 > [!CAUTION]
 > 
->Al momento de ejecutar las pruebas de este ejercicio me topé con que los mismos fallaban ya que una variable de entorno que originaba del script/docker-compose original entraba en conflicto con lo que el archivo de config de los tests esperaba.
+>Al momento de ejecutar las pruebas de este ejercicio me topé con que los mismos fallaban, ya que una variable de entorno que originaba del script/docker-compose original entraba en conflicto con lo que el archivo de config de los tests esperaba.
 
 Tras indagar en el código del server se puede encontrar el siguiente snippet:
 
@@ -455,9 +455,9 @@ Se creó un nuevo script llamado [py_env_check.sh](scripts/py_env_check.sh) el c
 
 ### Diseño de la Solución
 
-Se tomó la decisión de realizar el script de validación del echo-server nuevamente en Python, no por algun tema en particular si no para estar en sintonia con el script previamente realizado.
+Se tomó la decisión de realizar el script de validación del echo-server nuevamente en Python, no por algún tema en particular si no para estar en sintonia con el script previamente realizado.
 
-Este ejercicio pedia que haciendo uso de `netcat` _FUERA_ de la `host-machine` enviemos un mensaje al servidor y corroborar que el mismo nos haga el echo.
+Este ejercicio pedía que haciendo uso de `netcat` _FUERA_ de la `host-machine` enviemos un mensaje al servidor y corroborar que el mismo nos haga el echo.
 
 Para esto se usó los siguientes comandos:
 
@@ -466,15 +466,164 @@ NETCAT_COMMAND = f'echo "{MESSAGE}" | nc {SERVER_HOST} {SERVER_PORT}'
 DOCKER_COMMAND = f"docker run --rm --network {NETWORK} busybox:latest /bin/sh -c '{NETCAT_COMMAND}'"
 ```
 
-> Esto esta todo en el script [validar-echo-server.sh](validar-echo-server.sh) que a su vez invoca a [validate_echo.py](scripts/validate_echo.py)
+> Esto está todo en el script [validar-echo-server.sh](validar-echo-server.sh) que a su vez invoca a [validate_echo.py](scripts/validate_echo.py)
 
-Y a continuación se explicara el razonamiento detras de cada componente:
+Y a continuación se explicará el razonamiento detrás de cada componente:
 
-- `docker run`: permite la ejecución de un _nuevo_ contenedor, permitiendonos spawnear rapidamente el proceso que necesitamos sin mucho setup.
+- `docker run`: permite la ejecución de un _nuevo_ contenedor, permitiéndonos spawnear rápidamente el proceso que necesitamos sin mucho setup.
 - `--rm`: flag que indica que el contenedor generado debe eliminarse tras culminar su ejecución.
 - `--network`: simple flag que permite decir el nombre de la network donde se debe operar, es este que nos permite comunicarnos directamente entre los contenedores sin necesidad de tener netcat en la `host-machine`.
 - `busybox:latest`: tomando inspiración del [Dockerfile del Client](client/Dockerfile) hago uso de una ligera imagen de linux para usar el netcat que incluye.
 
 El resto son los comandos requeridos para ejecutar el propio comando de netcat ya dentro de la nueva imagen.
 
+## Ejercicio N°4: Graceful Shutdown
+
+----
+
+<h4 align="center"><a href="https://github.com/gabokatta/tp0-base/compare/ej3...gabokatta:tp0-base:ej4?expand=1">diff - ej3</a></h4>
+
+---
+
+### Diseño de la Solución
+
+- CLIENTE (GOLANG)
+
+Se creó un nuevo archivo [signal.go](client/common/signal.go) el cual contiene la implementación de un struct llamado `SignalHandler`.
+Este es el encargado de crear un `channel` que escucha por señales del OS, especificamente fue configurado para recibir:
+
+1. SIGINT
+2. SIGTERM
+
+```go
+type SignalHandler struct {
+	channel chan os.Signal
+	ctx     context.Context
+	cancel  context.CancelFunc
+}
+
+func NewSignalHandler() *SignalHandler {
+	ctx, cancel := context.WithCancel(context.Background())
+	channel := make(chan os.Signal, 1)
+	signal.Notify(channel, syscall.SIGTERM, syscall.SIGINT)
+
+	sh := &SignalHandler{
+		channel: channel,
+		ctx:     ctx,
+		cancel:  cancel,
+	}
+
+	go sh.listen()
+
+	return sh
+}
+```
+
+El struct contiene:
+
+1. El Channel donde escuchar las señales.
+2. El Contexto a ser compartido entre el Handler y el Cliente.
+3. La función de cancelación que será activada cuando una señal llegue.
+
+Dentro del constructor se puede ver una go-rutina `go sh.listen()`, la misma está compuesta de la siguiente manera:
+
+```go
+func (sh *SignalHandler) listen() {
+	sig := <-sh.channel
+	log.Warningf("action: signal_received | result: in_progress | code: %v", sig)
+	sh.cancel()
+}
+```
+
+Lo que hace es hacer que en su propio thread ligero, la go-rutina espere bloqueando por un mensaje de señal, y cuando llegue, triggerear el cancelado.
+
+Luego, en el [client.go](client/common/client.go) los cambios no fueron muchos, en el loop principal se agregó una funcion `defer` que será ejecutada cuando
+el programa salga con normalidad o por interrupción.
+
+```go
+// ...
+func (c *Client) StartClientLoop() {
+	defer c.cleanup()
+// ...
+```
+
+Además, al momento de las iteraciones, se chequea si llegó alguna señal de shutdown.
+
+```go
+// ...
+for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
+		if c.signal.shouldShutdown() {
+			log.Infof("action: shutdown_requested | result: success | client_id: %v | completed_messages: %v",
+				c.config.ID,
+				msgID-1)
+			return
+		}
+// ...
+```
+
+La función `ShouldShutDown()` hace uso de `select` el cual le permite detectar si la funcion `cancel` del contexto ya fue llamada previamente sin bloquear.
+
+```go
+func (sh *SignalHandler) shouldShutdown() bool {
+	select {
+	case <-sh.ctx.Done(): //este canal tendrá un mensaje si ya se ejecuto cancel()
+		return true
+	default:             //hace que el chequeo no sea bloqueante permitiendo salir rápidamente.
+		return false
+	}
+}
+```
+
+- SERVIDOR (PYTHON)
+
+En el servidor, de manera similar al cliente, se creó [cleanup.py](server/common/cleanup.py) el cual contiene un objeto `Shutdown`
+que es encargado de notificarle al Server que debe iniciar el apagado controlado.
+
+Esto se puede hacer, ya que `Shutdown` conserva una referencia al servidor. A su vez, en [main.py](server/main.py)
+es donde se hace el registro de los manejadores de las señales:
+
+- SIGINT
+- SIGTERM
+
+Esto es de la siguiente manera:
+
+```python
+# Initialize server and start server loop
+    server = Server(port, listen_backlog)
+    set_shutdown_signals(Shutdown(server))
+    server.run()
+```
+
+Con el método set_shutdown_signals(Shutdown):
+
+```python
+def set_shutdown_signals(handler: Shutdown):
+    """
+    Given the ShutdownHandler, registers the triggers for SIGTERM and SIGINT.
+    """
+    signal.signal(signal.SIGTERM, handler.trigger)
+    signal.signal(signal.SIGINT, handler.trigger)
+```
+
+Siendo el método `trigger()` el que le indica al servidor que empiece el shutdown.
+
+Ahora, dentro del [server.py](server/common/server.py) como tal, se agregó una variable `self._alive`
+la cual sirve de flag modificable por las señales y viene a reemplazar el `while true:` que existia preeviamente.
+
+```python
+def run(self):
+        while self._alive:
+            try:
+                self._client_socket = self.__accept_new_connection()
+                self.__handle_client_connection()
+            except OSError as e:
+                if self._alive:
+                    logging.error(f"action: accept_connection | result: fail | error: {e}")
+
+        self._cleanup()
+        logging.error(f'action: graceful_shutdown | result: success')
+```
+
+Una vez que el `Shutdown()` le avisa al server que se apague, este sale del loop y ejecuta
+`self._cleanup()` para cerrar todos sus recursos de manera controlada.
 

@@ -59,7 +59,7 @@ func (c *Client) StartClientLoop() {
 	// There is an autoincremental msgID to identify every message sent
 	// Messages if the message amount threshold has not been surpassed
 	for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
-		if c.signal.shouldShutdown() {
+		if c.signal.ShouldShutdown() {
 			log.Infof("action: shutdown_requested | result: success | client_id: %v | completed_messages: %v",
 				c.config.ID,
 				msgID-1)
@@ -105,7 +105,5 @@ func (c *Client) cleanup() {
 	if c.signal != nil {
 		c.signal.Cleanup()
 	}
-	// todo: for now, i have no need for other file descriptors to be closed since (for some reason)
-	// 	the base client closes the connection after each communication (lmao?)
-	// 	so this method will be improved on when shifting to a more complex client logic.
+	// todo: for now, no other file descriptors in the code, will be added here later.
 }
