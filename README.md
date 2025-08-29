@@ -196,6 +196,12 @@ En esta sección se describirán las decisiones de diseño de cada uno de los ej
 
 ## Ejercicio N°1: Script para generar DockerCompose
 
+----
+
+<h4 align='center'>[diff - master](https://github.com/gabokatta/tp0-base/compare/master...gabokatta:tp0-base:ej1?expand=1)</h4>
+
+---
+
 ### Diseño de la solucion:
 
 Se opto por usar python como lenguaje de scripting para el generador, esto por comodidad y flexibilidad para construir los archivos YAML.
