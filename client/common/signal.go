@@ -31,7 +31,7 @@ func NewSignalHandler() *SignalHandler {
 
 func (sh *SignalHandler) listen() {
 	sig := <-sh.channel
-	log.Warningf("action: shutdown_signal_received | signal: %v", sig)
+	log.Warningf("action: signal_received | result: in_progress | code: %v", sig)
 	sh.cancel()
 }
 
