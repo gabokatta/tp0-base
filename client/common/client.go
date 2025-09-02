@@ -63,23 +63,26 @@ func (c *Client) StartClientLoop() {
 		if c.signal.ShouldShutdown() {
 			log.Infof("action: shutdown_requested | result: success | client_id: %v | completed_messages: %v",
 				c.config.ID, batchID-1)
-			return
+			break
 		}
 
 		bets, err := c.batchMaker.MakeBatch()
 		if err != nil {
 			log.Errorf("action: make_batch | result: fail | client_id: %v | batch_id: %v | error: %v",
 				c.config.ID, batchID, err)
-			return
+			break
 		}
 
 		if bets == nil || len(bets) == 0 {
 			log.Infof("action: processing_complete | result: success | client_id: %v | total_batches: %v",
 				c.config.ID, batchID-1)
-			return
+			break
 		}
 
-		c.sendBetBatch(bets, batchID)
+		err = c.sendBetBatch(bets, batchID)
+		if err != nil {
+			break
+		}
 		batchID++
 
 		time.Sleep(c.config.LoopPeriod)
@@ -87,7 +90,7 @@ func (c *Client) StartClientLoop() {
 
 }
 
-func (c *Client) sendBetBatch(bets []protocol.Bet, batchID int) {
+func (c *Client) sendBetBatch(bets []protocol.Bet, batchID int) error {
 	log.Debugf("action: send_batch | result: in_progress | client_id: %v | batch_id: %v | bet_count: %v",
 		c.config.ID, batchID, len(bets))
 
@@ -95,10 +98,12 @@ func (c *Client) sendBetBatch(bets []protocol.Bet, batchID int) {
 	if err != nil {
 		log.Errorf("action: send_batch | result: fail | client_id: %v | batch_id: %v | bet_count: %v | error: %v",
 			c.config.ID, batchID, len(bets), err)
-		return
+		return err
 	}
 
 	c.handleResponse(response, bets, batchID)
+
+	return nil
 }
 
 // Given the server response, this function takes into account the different packet types in order to act.
@@ -115,11 +120,14 @@ func (c *Client) handleResponse(response protocol.Packet, bets []protocol.Bet, i
 }
 
 func (c *Client) cleanup() {
+	log.Infof("action: clean_up | result: in_progress | client_id: %v", c.config.ID)
 
 	if c.batchMaker != nil {
 		if err := c.batchMaker.Close(); err != nil {
 			log.Warningf("action: batchmaker_close | result: fail | client_id: %v | error: %v",
 				c.config.ID, err)
+		} else {
+			log.Infof("action: closing_bet_file | status: success")
 		}
 	}
 
@@ -127,11 +135,15 @@ func (c *Client) cleanup() {
 		if err := c.network.Disconnect(); err != nil {
 			log.Warningf("action: network_disconnect | result: fail | client_id: %v | error: %v",
 				c.config.ID, err)
+		} else {
+			log.Infof("action: closing_network | status: success")
 		}
+
 	}
 
 	if c.signal != nil {
 		c.signal.Cleanup()
+		log.Infof("action: closing_signal_channel | status: success")
 	}
 
 	log.Infof("action: clean_up | result: success | client_id: %v", c.config.ID)

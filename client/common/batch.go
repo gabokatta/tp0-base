@@ -31,10 +31,14 @@ func getBetsLocation(clientID string) string {
 
 func NewBatchMaker(clientID string, config BatchConfig, signal *SignalHandler) (*BatchMaker, error) {
 	path := getBetsLocation(clientID)
+	log.Debugf("action: load_csv | result: in_progress | file: %s", path)
 	file, err := os.Open(path)
 	if err != nil {
+		log.Errorf("action: load_csv | result: fail | file: %s", path)
 		return nil, fmt.Errorf("failed to open CSV: %w", err)
 	}
+
+	log.Infof("action: load_csv | result: success | file: %s", file.Name())
 
 	reader := csv.NewReader(bufio.NewReader(file))
 	reader.FieldsPerRecord = 5
@@ -161,6 +165,7 @@ func (bm *BatchMaker) shouldStopBatch(bets []protocol.Bet) bool {
 }
 
 func (bm *BatchMaker) Close() error {
+	log.Debugf("action: closing_bet_file | status: in_progress")
 	if bm.csv != nil {
 		if err := bm.csv.Close(); err != nil {
 			return fmt.Errorf("failed to close CSV file: %w", err)

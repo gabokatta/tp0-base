@@ -31,7 +31,7 @@ func NewSignalHandler() *SignalHandler {
 
 func (sh *SignalHandler) listen() {
 	sig := <-sh.channel
-	log.Warningf("action: signal_received | result: in_progress | code: %v", sig)
+	log.Debugf("action: signal_received | result: success | code: %v", sig)
 	sh.cancel()
 }
 
@@ -45,8 +45,7 @@ func (sh *SignalHandler) ShouldShutdown() bool {
 }
 
 func (sh *SignalHandler) Cleanup() {
-	log.Infof("action: closing_signal_channel | status: in_progress")
+	log.Debugf("action: closing_signal_channel | status: in_progress")
 	signal.Stop(sh.channel)
 	close(sh.channel)
-	log.Infof("action: closing_signal_channel | status: success")
 }
