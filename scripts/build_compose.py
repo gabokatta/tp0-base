@@ -9,7 +9,7 @@ NETWORK_NAME = "testing_net"
 NETWORK_SUBNET = "172.25.125.0/24"
 SERVER_BASE_PATH = "./server"
 CLIENT_BASE_PATH = "./client"
-DATA_BASE_PATH = "./.data/dataset/"
+DATA_BASE_PATH = "./.data"
 
 
 class CoolDumper(yaml.Dumper):
