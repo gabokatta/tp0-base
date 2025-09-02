@@ -67,7 +67,7 @@ func (c *Client) StartClientLoop() {
 }
 
 func (c *Client) sendBet(iteration int) {
-	log.Debugf("action: sending_bet | client_id: %v | iteration: %v", c.config.ID, iteration)
+	log.Debugf("action: send_bet | result: in_progress | client_id: %v | iteration: %v", c.config.ID, iteration)
 
 	response, err := c.network.SendBet(c.config.ID, *c.bet)
 	if err != nil {
@@ -105,7 +105,7 @@ func (c *Client) cleanup() {
 		}
 	}
 
-	log.Infof("action: cleanup_completed | client_id: %v", c.config.ID)
+	log.Infof("action: clean_up | result: success | client_id: %v", c.config.ID)
 }
 
 // Funcion temporal, entiendo que luego vamos a leer desde archivos.
