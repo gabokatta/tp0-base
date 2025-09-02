@@ -6,15 +6,20 @@ import (
 	"net"
 )
 
+// Network handles TCP network communication with the server,
+// including connection management and packet transmission.
 type Network struct {
 	serverAddress string
 	conn          net.Conn
 }
 
+// NewNetwork creates a new Network instance with the specified server address.
 func NewNetwork(serverAddress string) *Network {
 	return &Network{serverAddress: serverAddress}
 }
 
+// Connect establishes a TCP connection to the server.
+// Returns an error if the connection cannot be established.
 func (n *Network) Connect() error {
 	if n.conn != nil {
 		return nil
@@ -29,6 +34,8 @@ func (n *Network) Connect() error {
 	return nil
 }
 
+// Disconnect closes the current connection to the server.
+// Returns an error if the connection cannot be closed properly.
 func (n *Network) Disconnect() error {
 	if n.conn != nil {
 		err := n.conn.Close()
@@ -38,6 +45,8 @@ func (n *Network) Disconnect() error {
 	return nil
 }
 
+// SendBet sends a bet to the server and returns the response packet.
+// Automatically connects before sending and disconnects after receiving.
 func (n *Network) SendBet(clientID string, bet Bet) (Packet, error) {
 	defer func() { _ = n.Disconnect() }()
 
@@ -62,6 +71,8 @@ func (n *Network) SendBet(clientID string, bet Bet) (Packet, error) {
 	return response, nil
 }
 
+// Send writes a packet to the network connection.
+// Returns an error if the connection is closed or packet encoding fails.
 func (n *Network) Send(packet Packet) error {
 	if n.conn == nil {
 		return net.ErrClosed
@@ -75,6 +86,8 @@ func (n *Network) Send(packet Packet) error {
 	return err
 }
 
+// Recv reads a packet from the network connection.
+// Returns an error if the connection is closed or packet decoding fails.
 func (n *Network) Recv() (Packet, error) {
 	if n.conn == nil {
 		return nil, net.ErrClosed
@@ -98,6 +111,9 @@ func (n *Network) Recv() (Packet, error) {
 	return DeserializePayload(header.MessageType, payloadBytes)
 }
 
+// recvExact reads exactly nBytes from the network connection.
+// The main objective is to avoid shortReads.
+// Returns an error if the connection is closed before reading all bytes.
 func (n *Network) recvExact(nBytes int) ([]byte, error) {
 	buf := make([]byte, nBytes)
 	bytesRead := 0
@@ -119,6 +135,9 @@ func (n *Network) recvExact(nBytes int) ([]byte, error) {
 	return buf, nil
 }
 
+// writeExact writes all bytes from data to the network connection.
+// The main objective is to avoid shortWrites.
+// Returns the number of bytes written and any error encountered.
 func (n *Network) writeExact(data []byte) (int, error) {
 	bytesWritten := 0
 	totalBytes := len(data)

@@ -17,6 +17,9 @@ type ClientConfig struct {
 	LoopPeriod    time.Duration
 }
 
+// Client responsible for managing outgoing connections to the server.
+// Uses a signalHandler to be aware of graceful shutdowns.
+// The Network struct allows it to safely send messages to the server.
 type Client struct {
 	config  ClientConfig
 	signal  *SignalHandler
@@ -24,6 +27,9 @@ type Client struct {
 	bet     *protocol.Bet
 }
 
+// NewClient Returns a new Client given the config.
+// Using the server address stored in the config it instantiates a network struct.
+// The signalHandler is registered when this function is called.
 func NewClient(config ClientConfig) *Client {
 	return &Client{
 		config:  config,
@@ -32,6 +38,7 @@ func NewClient(config ClientConfig) *Client {
 	}
 }
 
+// Initialize loads the bet from the environment variables (temporary)
 func (c *Client) Initialize() error {
 	bet, err := generateBetFromEnv()
 	if err != nil {
@@ -45,6 +52,10 @@ func (c *Client) Initialize() error {
 	return nil
 }
 
+// StartClientLoop Handles the main logic-loop of the client application
+// After initializing the bet to send, the loop begins and on each iteration the client checks if it needs to shutdown.
+// On each iteration the client sleeps and when its done we exit de loop using the clean up deferred function to clean
+// all resources.
 func (c *Client) StartClientLoop() {
 	defer c.cleanup()
 
@@ -66,9 +77,10 @@ func (c *Client) StartClientLoop() {
 		c.config.ID, c.config.LoopAmount)
 }
 
+// This function uses the network to send the packet and logs the error if they exist.
+// After sending the server sends a response and the client handles it.
 func (c *Client) sendBet(iteration int) {
 	log.Debugf("action: send_bet | result: in_progress | client_id: %v | iteration: %v", c.config.ID, iteration)
-
 	response, err := c.network.SendBet(c.config.ID, *c.bet)
 	if err != nil {
 		log.Errorf("action: send_bet | result: fail | client_id: %v | iteration: %v | dni: %v | error: %v",
@@ -79,6 +91,7 @@ func (c *Client) sendBet(iteration int) {
 	c.handleResponse(response, *c.bet, iteration)
 }
 
+// Given the server response, this function takes into account the different packet types in order to act.
 func (c *Client) handleResponse(response protocol.Packet, bet protocol.Bet, iteration int) {
 	switch resp := response.(type) {
 	case *protocol.ReplyPacket:

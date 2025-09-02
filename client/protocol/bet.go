@@ -8,6 +8,26 @@ import (
 	"time"
 )
 
+/*
+Bet is the domain representation of the main Bet data.
+This struct also contains the logic of its encoding and decoding.
+
+The struct is represented in the protocol as:
+
+- 1 Byte for variable FirstName len.
+
+- N bytes for said variable FirstName
+
+- 1 Byte for variable LastName len.
+
+- N bytes for said variable LastName.
+
+- 4 Bytes for Document.
+
+- 4 Bytes for Birthdate.
+
+- 2 Bytes for bet Number.
+*/
 type Bet struct {
 	FirstName string
 	LastName  string
@@ -16,6 +36,7 @@ type Bet struct {
 	Number    uint16
 }
 
+// Encode transforms a Bet into bytes while writing those same bytes into a IO Writer.
 func (b *Bet) Encode(w io.Writer) error {
 	if err := WriteString(w, b.FirstName); err != nil {
 		return err
@@ -32,6 +53,7 @@ func (b *Bet) Encode(w io.Writer) error {
 	return binary.Write(w, binary.BigEndian, b.Number)
 }
 
+// Decode parses a Bet from a Reader.
 func (b *Bet) Decode(r io.Reader) error {
 	var err error
 	if b.FirstName, err = ReadString(r); err != nil {
