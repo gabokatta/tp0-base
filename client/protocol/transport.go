@@ -38,10 +38,6 @@ func (n *Network) Disconnect() error {
 	return nil
 }
 
-func (n *Network) IsConnected() bool {
-	return n.conn != nil
-}
-
 func (n *Network) SendBet(clientID string, bet Bet) (Packet, error) {
 	defer func() { _ = n.Disconnect() }()
 

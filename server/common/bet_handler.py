@@ -18,8 +18,8 @@ class BetHandler:
         try:
             bet = packet.bet.to_domain(packet.agency_id)
             store_bets([bet])
-            msg = f"action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}"
-            return ReplyPacket(1, msg)
+            logging.info(f"action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}")
+            return ReplyPacket(1, "STORED")
         except ValueError as e:
             logging.error(f"action: process_bet | result: fail | error: {e}")
             return ErrorPacket(ErrorPacket.INVALID_BET, str(e))

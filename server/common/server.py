@@ -42,10 +42,11 @@ class Server:
         If a problem arises in the communication with the client, the
         client socket will also be closed
         """
-        with self._client_socket:
+        with self._client_socket as s:
             try:
-                network = Network(self._client_socket)
+                network = Network(s)
                 packet = network.recv()
+                logging.info(f"action: receive_message | result: in_progress | ip: {s.getpeername()}")
                 response = self._bet_service.handle(packet)
                 network.send(response)
             except ConnectionError as e:
@@ -60,9 +61,9 @@ class Server:
         """
 
         # Connection arrived
-        logging.info('action: accept_connections | result: in_progress')
+        logging.debug('action: accept_connections | result: in_progress')
         c, addr = self._server_socket.accept()
-        logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
+        logging.debug(f'action: accept_connections | result: success | ip: {addr[0]}')
         return c
 
     def _cleanup(self):
