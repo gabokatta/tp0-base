@@ -6,17 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 )
 
 const (
 	MsgBet   = 0x01
 	MsgReply = 0x02
 	MsgError = 0x03
-)
-
-const (
-	ReplyStatusOK    = 0x00
-	ReplyStatusError = 0x01
 )
 
 const (
@@ -116,8 +112,18 @@ func DecodeBetPacket(r io.Reader) (*BetPacket, error) {
 	return &BetPacket{AgencyID: agencyID, Bet: bet}, nil
 }
 
+func NewBetPacket(id string, bet Bet) (*BetPacket, error) {
+	n, err := strconv.ParseUint(id, 10, 8)
+	if err != nil {
+		return nil, err
+	}
+	return &BetPacket{
+		AgencyID: uint8(n),
+		Bet:      bet,
+	}, nil
+}
+
 type ReplyPacket struct {
-	Status    bool
 	DoneCount uint32
 	Message   string
 }
@@ -125,14 +131,6 @@ type ReplyPacket struct {
 func (p *ReplyPacket) Type() uint8 { return MsgReply }
 
 func (p *ReplyPacket) Encode(w io.Writer) error {
-	status := ReplyStatusOK
-	if !p.Status {
-		status = ReplyStatusError
-	}
-
-	if err := binary.Write(w, binary.BigEndian, status); err != nil {
-		return err
-	}
 	if err := binary.Write(w, binary.BigEndian, p.DoneCount); err != nil {
 		return err
 	}
@@ -149,11 +147,6 @@ func (p *ReplyPacket) Encode(w io.Writer) error {
 }
 
 func DecodeReplyPacket(r io.Reader) (*ReplyPacket, error) {
-	var status uint8
-	if err := binary.Read(r, binary.BigEndian, &status); err != nil {
-		return nil, err
-	}
-
 	var doneCount uint32
 	if err := binary.Read(r, binary.BigEndian, &doneCount); err != nil {
 		return nil, err
@@ -170,7 +163,6 @@ func DecodeReplyPacket(r io.Reader) (*ReplyPacket, error) {
 	}
 
 	return &ReplyPacket{
-		Status:    status == ReplyStatusOK,
 		DoneCount: doneCount,
 		Message:   string(msgBytes),
 	}, nil
@@ -219,4 +211,15 @@ func DecodeErrorPacket(r io.Reader) (*ErrorPacket, error) {
 		ErrorCode: errorCode,
 		Message:   string(msgBytes),
 	}, nil
+}
+
+func ErrorFromPacket(e ErrorPacket) string {
+	switch e.ErrorCode {
+	case ErrInvalidPacket:
+		return "INVALID_PACKET"
+	case ErrInvalidBetData:
+		return "INVALID_BET"
+	default:
+		return "UNKNOWN_ERROR"
+	}
 }

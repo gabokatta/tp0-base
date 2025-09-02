@@ -1,3 +1,4 @@
+import random
 import sys
 import yaml
 import os
@@ -79,7 +80,12 @@ def base_client(name: str, client_id: int):
         "image": "client:latest",
         "entrypoint": "/client",
         "environment": [
-            f"CLI_ID={client_id}"
+            f"CLI_ID={client_id}",
+            f"NOMBRE=Gabriel",
+            f"APELLIDO=Katta",
+            f"DOCUMENTO={95988310 + client_id}",
+            f"NACIMIENTO=200{client_id}-02-26",
+            f"NUMERO={9990 + client_id}",
         ],
         "volumes": [
             f"{os.path.abspath(CLIENT_BASE_PATH)}/config.yaml:/config.yaml",

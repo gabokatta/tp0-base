@@ -123,7 +123,6 @@ class BetPacket(Packet):
 class ReplyPacket(Packet):
     """
     Reply Packet Payload structure:
-        - 1 Byte: status (uint8) - 0x00 = OK, 0x01 = ERROR
         - 4 Bytes: done_count (uint32) - Number of processed operations
         - Variable: message - Length-prefixed string (1 byte length + UTF-8 bytes)
 
@@ -131,11 +130,7 @@ class ReplyPacket(Packet):
     and providing additional information.
     """
 
-    OK_STATUS = 0x00
-    ERROR_STATUS = 0x01
-
-    def __init__(self, status: bool, done_count: int, msg: str = ""):
-        self.status = status
+    def __init__(self, done_count: int, msg: str = ""):
         self.done_count = done_count
         self.msg = msg
 
@@ -143,9 +138,7 @@ class ReplyPacket(Packet):
         return MSG_REPLY
 
     def serialize_payload(self) -> bytes:
-        status = self.OK_STATUS if self.status else self.ERROR_STATUS
         writer = ByteWriter()
-        writer.write_uint8(status)
         writer.write_uint32(self.done_count)
         writer.write_string(self.msg)
         return writer.get_bytes()
@@ -153,10 +146,9 @@ class ReplyPacket(Packet):
     @classmethod
     def deserialize_payload(cls, data: bytes) -> 'ReplyPacket':
         reader = ByteReader(data)
-        status = reader.read_uint8()
         done_count = reader.read_uint32()
         message = reader.read_string()
-        return cls(status == cls.OK_STATUS, done_count, message)
+        return cls(done_count, message)
 
 
 class ErrorPacket(Packet):
@@ -168,6 +160,14 @@ class ErrorPacket(Packet):
     This packet is used to communicate error conditions with specific error codes
     and descriptive messages.
     """
+
+    INVALID_PACKET = 0x01
+    INVALID_BET = 0x02
+
+    CODES = {
+        INVALID_PACKET: "BAD_PACKET",
+        INVALID_BET: "BAD_BET",
+    }
 
     def __init__(self, error_code: int, message: str = ""):
         self.error_code = error_code
