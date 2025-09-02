@@ -82,8 +82,8 @@ func (c *Client) sendBet(iteration int) {
 func (c *Client) handleResponse(response protocol.Packet, bet protocol.Bet, iteration int) {
 	switch resp := response.(type) {
 	case *protocol.ReplyPacket:
-		log.Infof("action: apuesta_enviada | result: success | client_id: %v | iteration: %v | dni: %v | numero: %v | server_message: %v",
-			c.config.ID, iteration, bet.Document, bet.Number, resp.Message)
+		log.Infof("action: apuesta_enviada | result: success | client_id: %v | iteration: %v | dni: %v | numero: %v",
+			c.config.ID, iteration, bet.Document, bet.Number)
 	case *protocol.ErrorPacket:
 		log.Errorf("action: apuesta_enviada | result: fail | client_id: %v | iteration: %v | dni: %v | numero: %v | error_code: %v | msg: %v",
 			c.config.ID, iteration, bet.Document, bet.Number, protocol.ErrorFromPacket(*resp), resp.Message)
