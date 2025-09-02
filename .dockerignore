@@ -1,0 +1,4 @@
+# Ignoramos lo que hacemos mount en el compose.
+client/config.yaml
+server/config.ini
+.data/

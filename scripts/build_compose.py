@@ -1,4 +1,3 @@
-import random
 import sys
 import yaml
 import os
@@ -10,6 +9,7 @@ NETWORK_NAME = "testing_net"
 NETWORK_SUBNET = "172.25.125.0/24"
 SERVER_BASE_PATH = "./server"
 CLIENT_BASE_PATH = "./client"
+DATA_BASE_PATH = "./.data/dataset/"
 
 
 class CoolDumper(yaml.Dumper):
@@ -80,15 +80,11 @@ def base_client(name: str, client_id: int):
         "image": "client:latest",
         "entrypoint": "/client",
         "environment": [
-            f"CLI_ID={client_id}",
-            f"NOMBRE=Gabriel",
-            f"APELLIDO=Katta",
-            f"DOCUMENTO={95988310 + client_id}",
-            f"NACIMIENTO=2001-02-26",
-            f"NUMERO={9990 + client_id}",
+            f"CLI_ID={client_id}"
         ],
         "volumes": [
             f"{os.path.abspath(CLIENT_BASE_PATH)}/config.yaml:/config.yaml",
+            f"{os.path.abspath(DATA_BASE_PATH)}/agency-{client_id}.csv:/.data/agency-{client_id}.csv"
         ],
         "networks": [NETWORK_NAME],
         "depends_on": [SERVER_SERVICE]

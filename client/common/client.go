@@ -1,7 +1,6 @@
 package common
 
 import (
-	"os"
 	"time"
 
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/protocol"
@@ -40,7 +39,7 @@ func NewClient(config ClientConfig) *Client {
 
 // Initialize loads the bet from the environment variables (temporary)
 func (c *Client) Initialize() error {
-	bet, err := generateBetFromEnv()
+	bet, err := loadBets()
 	if err != nil {
 		log.Errorf("action: initialize | result: fail | client_id: %v | error: %v", c.config.ID, err)
 		return err
@@ -119,21 +118,14 @@ func (c *Client) cleanup() {
 	log.Infof("action: clean_up | result: success | client_id: %v", c.config.ID)
 }
 
-// Funcion temporal, entiendo que luego vamos a leer desde archivos.
-func generateBetFromEnv() (*protocol.Bet, error) {
-	requiredVars := []string{"NOMBRE", "APELLIDO", "DOCUMENTO", "NACIMIENTO", "NUMERO"}
-	for _, varName := range requiredVars {
-		if os.Getenv(varName) == "" {
-			log.Errorf("action: env_validation | result: fail | missing_var: %v", varName)
-		}
-	}
+func loadBets() (*protocol.Bet, error) {
 
 	bet, err := protocol.NewBet(
-		os.Getenv("NOMBRE"),
-		os.Getenv("APELLIDO"),
-		os.Getenv("DOCUMENTO"),
-		os.Getenv("NACIMIENTO"),
-		os.Getenv("NUMERO"),
+		"placeholder",
+		"placeholder",
+		"1111",
+		"2001-02-26",
+		"111",
 	)
 
 	if err != nil {
