@@ -1,5 +1,8 @@
-import socket
 import logging
+import socket
+
+from common.bet_handler import BetHandler
+from protocol.transport import Network
 
 
 class Server:
@@ -11,6 +14,7 @@ class Server:
         self._client_socket = None
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
+        self._bet_service = BetHandler()
 
     def run(self):
         """
@@ -38,17 +42,14 @@ class Server:
         If a problem arises in the communication with the client, the
         client socket will also be closed
         """
-        try:
-            # TODO: Modify the receive to avoid short-reads
-            msg = self._client_socket.recv(1024).rstrip().decode('utf-8')
-            addr = self._client_socket.getpeername()
-            logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {msg}')
-            # TODO: Modify the send to avoid short-writes
-            self._client_socket.send("{}\n".format(msg).encode('utf-8'))
-        except OSError as e:
-            logging.error(f"action: receive_message | result: fail | error: {e}")
-        finally:
-            self._client_socket.close()
+        with self._client_socket:
+            try:
+                network = Network(self._client_socket)
+                packet = network.recv()
+                response = self._bet_service.handle(packet)
+                network.send(response)
+            except ConnectionError as e:
+                logging.error(f"action: receive_message | result: fail | error: {e}")
 
     def __accept_new_connection(self):
         """

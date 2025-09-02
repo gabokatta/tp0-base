@@ -21,15 +21,15 @@ class Network:
         Attempts to send a complete packet, handling possible short-writes.
         """
         data = packet.serialize()
-        sent = 0
+        curr_bytes = 0
         total = len(data)
 
-        while sent < total:
+        while curr_bytes < total:
             try:
-                sent = self.sock.send(data[total:])
-                if sent == 0:
+                sent_bytes = self.sock.send(data[curr_bytes:])
+                if sent_bytes == 0:
                     raise ConnectionError("Socket connection broken during send")
-                total += sent
+                curr_bytes += sent_bytes
             except socket.error as e:
                 raise ConnectionError(f"Error sending data: {e}")
 

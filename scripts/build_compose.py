@@ -84,7 +84,7 @@ def base_client(name: str, client_id: int):
             f"NOMBRE=Gabriel",
             f"APELLIDO=Katta",
             f"DOCUMENTO={95988310 + client_id}",
-            f"NACIMIENTO=200{client_id}-02-26",
+            f"NACIMIENTO=2001-02-26",
             f"NUMERO={9990 + client_id}",
         ],
         "volumes": [

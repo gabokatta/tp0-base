@@ -43,6 +43,8 @@ func (n *Network) IsConnected() bool {
 }
 
 func (n *Network) SendBet(clientID string, bet Bet) (Packet, error) {
+	defer func() { _ = n.Disconnect() }()
+
 	packet, err := NewBetPacket(clientID, bet)
 	if err != nil {
 		return nil, err
@@ -51,9 +53,6 @@ func (n *Network) SendBet(clientID string, bet Bet) (Packet, error) {
 	if err := n.Connect(); err != nil {
 		return nil, err
 	}
-
-	// lo ignoro ya que estamos en pleno shutdown.
-	defer func() { _ = n.Disconnect() }()
 
 	if err := n.Send(packet); err != nil {
 		return nil, err
