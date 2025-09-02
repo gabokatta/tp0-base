@@ -82,15 +82,14 @@ class Server:
             except OSError as e:
                 logging.error(f'action: server_socket_shutdown | result: fail | error: {e}')
 
-
-def shutdown(self):
-    logging.info('action: graceful_shutdown | result: in_progress')
-    self._alive = False
-    # attempt to close server socket to make server quit waiting new connections.
-    if not self._server_socket_closed:
-        try:
-            self._server_socket.close()
-            self._server_socket_closed = True
-            logging.info('action: server_socket_forced_close | result: success')
-        except OSError as e:
-            logging.error(f'action: server_socket_forced_close | result: fail | error: {e}')
+    def shutdown(self):
+        logging.info('action: graceful_shutdown | result: in_progress')
+        self._alive = False
+        # attempt to close server socket to make server quit waiting new connections.
+        if not self._server_socket_closed:
+            try:
+                self._server_socket.close()
+                self._server_socket_closed = True
+                logging.info('action: server_socket_forced_close | result: success')
+            except OSError as e:
+                logging.error(f'action: server_socket_forced_close | result: fail | error: {e}')
