@@ -627,3 +627,174 @@ def run(self):
 Una vez que el `Shutdown()` le avisa al server que se apague, este sale del loop y ejecuta
 `self._cleanup()` para cerrar todos sus recursos de manera controlada.
 
+## Ejercicio N°5: Protocolo de Comunicación
+
+----
+
+<h4 align="center"><a href="https://github.com/gabokatta/tp0-base/compare/ej4...gabokatta:tp0-base:ej5?expand=1">diff - ej4</a></h4>
+
+---
+
+> _NOTA_: este ejercicio quizás contiene más cambios de los esperados, sin embargo, tras leer detalladamente los requerimientos de los ejercicios 5,6,7 y 8 decidí tomarme un poco más de tiempo en definir un buen protocolo y estructura de código en el server y cliente para hacer mucho más simples los futuros cambios.
+
+### Protocolo
+
+Se diseñó un protocolo binario orientado a paquetes para la comunicación entre cliente y servidor. El protocolo define tres tipos de mensajes principales:
+
+**Estructura General:**
+Todos los paquetes siguen el patrón Header + Payload:
+
+```
+Header (5 bytes):
+- 1 Byte: MessageType (uint8)
+- 4 Bytes: PayloadLength (uint32, big-endian)
+
+Payload: Variable según el tipo de mensaje
+```
+
+**Tipos de Mensaje:**
+- `MsgBet (0x01)`: Envío de apuesta desde cliente
+- `MsgReply (0x02)`: Respuesta exitosa del servidor
+- `MsgError (0x03)`: Respuesta de error del servidor
+
+**BetPacket (0x01):**
+```
+Payload:
+- 1 Byte: agency_id (uint8)
+- Bet data:
+  - 1 Byte: first_name_len + first_name (UTF-8)
+  - 1 Byte: last_name_len + last_name (UTF-8)
+  - 4 Bytes: document (uint32)
+  - 4 Bytes: birthdate (uint32, formato YYYYMMDD)
+  - 2 Bytes: number (uint16)
+```
+
+**ReplyPacket (0x02):**
+```
+Payload:
+- 4 Bytes: done_count (uint32)
+- 1 Byte: message_len + message (UTF-8)
+```
+
+**ErrorPacket (0x03):**
+```
+Payload:
+- 1 Byte: error_code (uint8)
+- 1 Byte: message_len + message (UTF-8)
+```
+
+### Serialización
+
+Para el manejo de datos binarios se utilizaron las librerías estándar de ambos lenguajes:
+
+**Go:**
+- `encoding/binary`: Para serialización de enteros con `binary.Write()` y `binary.Read()`
+- `io.ReadFull()`: Para lecturas completas desde buffers de bytes (no sockets)
+- Uso de `binary.BigEndian` para consistencia de endianness entre plataformas
+- [Métodos Helper](/client/protocol/utils.go) para manejar distintos strings variables.
+
+**Python:**
+- `int.to_bytes()` y `int.from_bytes()`: Métodos nativos para conversión entero-bytes
+- `str.encode('utf-8')` y `bytes.decode('utf-8')`: Para manejo de strings
+- Especificación explícita de `byteorder="big"` para mantener consistencia
+- [Métodos Helper](/server/protocol/utils.py) para manejar distintos tamaños de enteros y strings variables.
+
+**Manejo de ShortRead y ShortWrite**
+
+Tanto en Go como en Python se hicieron uso de métodos como:
+
+- [recv_exact/send](server/protocol/transport.py)
+- [writeExact/recvExact](client/protocol/transport.go)
+
+En donde tanto el enviado y el recibido de paquetes hace uso de la estructura binaria definida para asegurar que los mensajes leen los bytes exactos requeridos para instanciar los paquetes de manera correcta.
+
+Esto se logró apoyándose en la estructura de Header + Payload variable, ambos contando con información de los bytes a leer/escribir.
+
+En ambos métodos se cuenta con un loop que envía o recibe datos hasta completar lo requerido o que se cierre la conexión.
+
+
+### Cambios al Dockerfile
+
+Se agregaron variables de entorno temporales para las apuestas en el script generador:
+
+```python
+"environment": [
+    f"CLI_ID={client_id}",
+    f"NOMBRE=Gabriel",
+    f"APELLIDO=Katta", 
+    f"DOCUMENTO={95988310 + client_id}",
+    f"NACIMIENTO=2001-02-26",
+    f"NUMERO={9990 + client_id}",
+]
+```
+
+### Cambios al Cliente
+
+**Restructuración completa del Cliente (Go):**
+
+**Nueva estructura de datos:**
+ - Se creó el paquete `protocol` con tipos `Bet`, `BetPacket`, `ReplyPacket`, `ErrorPacket`
+ - Separación clara entre datos de dominio y representación de red
+
+**Manejo de conexión mejorado:**
+ - Clase `Network` que encapsula la lógica de conexión TCP
+ - Métodos `SendBet()` que manejan el ciclo completo de envío/recepción
+ - Desconexión automática después de cada operación
+
+**Flujo de ejecución rediseñado:**
+```go
+   func (c *Client) StartClientLoop() {
+       defer c.cleanup()
+       
+       if err := c.Initialize(); err != nil {
+           return
+       }
+       
+       for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
+           if c.signal.ShouldShutdown() {
+               // graceful shutdown
+               return
+           }
+           c.sendBet(msgID)
+           time.Sleep(c.config.LoopPeriod)
+       }
+   }
+  ```
+
+**Manejo de respuestas:**
+ - Switch statement para diferentes tipos de paquetes de respuesta
+ - Logging específico para éxitos y errores
+ - Validación de tipos de respuesta del servidor
+
+### Cambios al Server
+
+**Restructuración del Server (Python):**
+
+**Nueva arquitectura de manejo:**
+
+ - Clase `BetHandler` que procesa las apuestas recibidas
+ - Separación de responsabilidades entre red y lógica de negocio
+
+**Manejo de conexión mejorado:**
+   ```python
+   def __handle_client_connection(self):
+       with self._client_socket as s:
+           try:
+               network = Network(s)
+               packet = network.recv()
+               response = self._bet_service.handle(packet)
+               network.send(response)
+           except ConnectionError as e:
+               logging.error(f"action: receive_message | result: fail | error: {e}")
+   ```
+
+**Procesamiento de apuestas:**
+ - Validación de estructura de paquetes
+ - Conversión entre representación de red y objetos de dominio
+ - Almacenamiento usando la función `store_bets()` existente
+ - Respuestas apropiadas según el resultado del procesamiento
+
+**Manejo de errores robusto:**
+ - Códigos de error específicos (`INVALID_PACKET`, `INVALID_BET`)
+ - Mensajes descriptivos en respuestas de error
+
