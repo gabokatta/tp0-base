@@ -7,10 +7,11 @@ class Server:
     def __init__(self, port, listen_backlog):
         # Initialize server socket
         self._alive = True
+        self._server_socket_closed = False
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._client_socket = None
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
+        self._client_socket = None
 
     def run(self):
         """
@@ -65,15 +66,31 @@ class Server:
         return c
 
     def _cleanup(self):
-        try:
-            if self._client_socket:
+
+        if self._client_socket:
+            try:
                 self._client_socket.close()
                 logging.info('action: client_socket_shutdown | result: success')
-            self._server_socket.close()
-            logging.info('action: server_socket_shutdown | result: success')
-        except OSError as e:
-            logging.error(f'action: graceful_shutdown | result: fail | error: {e}')
+            except OSError as e:
+                logging.error(f'action: client_socket_shutdown | result: fail | error: {e}')
 
-    def shutdown(self):
-        logging.info('action: graceful_shutdown | result: in_progress')
-        self._alive = False
+        if not self._server_socket_closed:
+            try:
+                self._server_socket.close()
+                self._server_socket_closed = True
+                logging.info('action: server_socket_shutdown | result: success')
+            except OSError as e:
+                logging.error(f'action: server_socket_shutdown | result: fail | error: {e}')
+
+
+def shutdown(self):
+    logging.info('action: graceful_shutdown | result: in_progress')
+    self._alive = False
+    # attempt to close server socket to make server quit waiting new connections.
+    if not self._server_socket_closed:
+        try:
+            self._server_socket.close()
+            self._server_socket_closed = True
+            logging.info('action: server_socket_forced_close | result: success')
+        except OSError as e:
+            logging.error(f'action: server_socket_forced_close | result: fail | error: {e}')
