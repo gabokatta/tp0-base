@@ -87,15 +87,16 @@ class BetPacket(Packet):
     """
     Bet Packet Payload structure:
         - 1 Byte: agency_id (uint8) - Identifier for the betting agency
-        - Bet object: See ProtocolBet class for detailed structure
+        - 4 Byte: bet_n (uint32) - Amount of bets
+        - ProtocolBet object list: See ProtocolBet class for detailed structure
 
     This packet contains betting information submitted by agencies.
     The bet data follows the ProtocolBet format.
     """
 
-    def __init__(self, agency_id: int, bet: ProtocolBet):
-        self.agency_id = agency_id
-        self.bet = bet
+    def __init__(self, agency_id: int, bets: [ProtocolBet]):
+        self.agency_id: int = agency_id
+        self.bets: [ProtocolBet] = bets
 
     def get_message_type(self) -> int:
         return MSG_BET
@@ -103,21 +104,22 @@ class BetPacket(Packet):
     def serialize_payload(self) -> bytes:
         writer = ByteWriter()
         writer.write_uint8(self.agency_id)
-        writer.write_bytes(self.bet.to_bytes())
+        writer.write_uint32(len(self.bets))
+        for bet in self.bets:
+            writer.write_bytes(bet.to_bytes())
         return writer.get_bytes()
 
     @classmethod
     def deserialize_payload(cls, data: bytes) -> 'BetPacket':
+        bets = []
         reader = ByteReader(data)
         agency_id = reader.read_uint8()
-        bet, _ = ProtocolBet.from_bytes(reader.data, reader.offset)
-        return cls(agency_id, bet)
-
-    @classmethod
-    def from_domain_bet(cls, bet: Bet) -> 'BetPacket':
-        """Creates a BetPacket object from a bet object."""
-        protocol_bet = ProtocolBet.from_domain(bet)
-        return BetPacket(int(bet.agency), protocol_bet)
+        bet_amount = reader.read_uint32()
+        for _ in range(bet_amount):
+            bet, new_offset = ProtocolBet.from_bytes(reader.data, reader.offset)
+            reader.offset = new_offset
+            bets.append(bet)
+        return cls(agency_id, bets)
 
 
 class ReplyPacket(Packet):
@@ -131,8 +133,8 @@ class ReplyPacket(Packet):
     """
 
     def __init__(self, done_count: int, msg: str = ""):
-        self.done_count = done_count
-        self.msg = msg
+        self.done_count: int = done_count
+        self.msg: str = msg
 
     def get_message_type(self) -> int:
         return MSG_REPLY
@@ -170,8 +172,8 @@ class ErrorPacket(Packet):
     }
 
     def __init__(self, error_code: int, message: str = ""):
-        self.error_code = error_code
-        self.message = message
+        self.error_code: int = error_code
+        self.message: str = message
 
     def get_message_type(self) -> int:
         return MSG_ERROR

@@ -1,7 +1,8 @@
 import logging
 
 from protocol.packet import Packet, ErrorPacket, BetPacket, ReplyPacket
-from common.utils import store_bets
+from protocol.data import ProtocolBet
+from common.utils import store_bets, Bet
 
 
 class BetHandler:
@@ -15,14 +16,18 @@ class BetHandler:
         if not isinstance(packet, BetPacket):
             return ErrorPacket(ErrorPacket.INVALID_PACKET, "Did not receive correct BetPacket.")
 
+        bets: [Bet] = []
         try:
-            bet = packet.bet.to_domain(packet.agency_id)
-            store_bets([bet])
-            logging.info(f"action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}")
-            return ReplyPacket(1, "STORED")
-        except ValueError as e:
-            logging.error(f"action: process_bet | result: fail | error: {e}")
-            return ErrorPacket(ErrorPacket.INVALID_BET, str(e))
+            parsed = ProtocolBet.to_domain_list(packet.agency_id, packet.bets)
+            bets.extend(parsed)
         except Exception as e:
-            logging.exception(f"action: process_bet | result: fail | unexpected: {e}")
-            return ErrorPacket(ErrorPacket.INVALID_BET, "Internal server error processing bet")
+            logging.error(f"action: apuesta_recibida | result: fail | error: {e}")
+            return ErrorPacket(ErrorPacket.INVALID_BET, "Invalid Bet batch, could not parse.")
+
+        try:
+            store_bets(bets)
+            logging.info(f"action: apuesta_recibida | result: success | cantidad: {len(bets)}")
+            return ReplyPacket(len(bets), "STORED")
+        except Exception as e:
+            logging.error(f"action: apuesta_recibida | result: fail | cantidad: {len(bets)} | error: {e}")
+            return ErrorPacket(ErrorPacket.INVALID_BET, f"Internal server error processing batch of {len(bets)} bets")

@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net"
 )
@@ -45,14 +46,14 @@ func (n *Network) Disconnect() error {
 	return nil
 }
 
-// SendBet sends a bet to the server and returns the response packet.
-// Automatically connects before sending and disconnects after receiving.
-func (n *Network) SendBet(clientID string, bet Bet) (Packet, error) {
+// SendBetBatch sends a batch of bets to the server and returns the response packet.
+// Creates the BetPacket internally and handles connection lifecycle.
+func (n *Network) SendBetBatch(clientID string, bets []Bet) (Packet, error) {
 	defer func() { _ = n.Disconnect() }()
 
-	packet, err := NewBetPacket(clientID, bet)
+	packet, err := NewBetPacket(clientID, bets)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create bet packet: %w", err)
 	}
 
 	if err := n.Connect(); err != nil {

@@ -106,11 +106,12 @@ BetPacket represents a bet submission from a client agency.
 
 The packet structure is:
 - 1 Byte for AgencyID
-- Bet struct (see Bet documentation for structure)
+- 4 Bytes for bet_n
+- Bet struct list (see Bet documentation for structure)
 */
 type BetPacket struct {
 	AgencyID uint8
-	Bet      Bet
+	Bets     []Bet
 }
 
 // Type returns the message type identifier for BetPacket.
@@ -121,7 +122,18 @@ func (p *BetPacket) Encode(w io.Writer) error {
 	if err := binary.Write(w, binary.BigEndian, p.AgencyID); err != nil {
 		return err
 	}
-	return p.Bet.Encode(w)
+
+	betN := uint32(len(p.Bets))
+	if err := binary.Write(w, binary.BigEndian, betN); err != nil {
+		return err
+	}
+
+	for i, bet := range p.Bets {
+		if err := bet.Encode(w); err != nil {
+			return fmt.Errorf("writing bet %d: %w", i, err)
+		}
+	}
+	return nil
 }
 
 // DecodeBetPacket deserializes a BetPacket from an io.Reader.
@@ -131,24 +143,34 @@ func DecodeBetPacket(r io.Reader) (*BetPacket, error) {
 		return nil, err
 	}
 
-	var bet Bet
-	if err := bet.Decode(r); err != nil {
+	var betN uint32
+	if err := binary.Read(r, binary.BigEndian, &betN); err != nil {
 		return nil, err
 	}
 
-	return &BetPacket{AgencyID: agencyID, Bet: bet}, nil
+	bets := make([]Bet, 0, betN)
+
+	for i := uint32(0); i < betN; i++ {
+		var bet Bet
+		if err := bet.Decode(r); err != nil {
+			return nil, err
+		}
+		bets = append(bets, bet)
+	}
+
+	return &BetPacket{AgencyID: agencyID, Bets: bets}, nil
 }
 
 // NewBetPacket creates a new BetPacket from string agency ID and Bet.
 // Returns an error if the agency ID cannot be converted to uint8.
-func NewBetPacket(id string, bet Bet) (*BetPacket, error) {
+func NewBetPacket(id string, bets []Bet) (*BetPacket, error) {
 	n, err := strconv.ParseUint(id, 10, 8)
 	if err != nil {
 		return nil, err
 	}
 	return &BetPacket{
 		AgencyID: uint8(n),
-		Bet:      bet,
+		Bets:     bets,
 	}, nil
 }
 

@@ -42,8 +42,17 @@ class ProtocolBet:
             bet.number
         )
 
+    @classmethod
+    def to_domain_list(cls, agency_id: int, protocol_bets: ['ProtocolBet']) -> [Bet]:
+        """Creates a list of domain object from a list of ProtocolBet objects."""
+        bets = []
+        for pb in protocol_bets:
+            b = pb.to_domain(agency_id)
+            bets.append(b)
+        return bets
+
     def to_domain(self, agency_id: int) -> Bet:
-        """Creates a domain object from a Bet object."""
+        """Creates a domain object from a ProtocolBet object."""
 
         # this is done to go from the YYYYMMDD format to YYYY-MM-DD
         year = self.birthdate // 10000
