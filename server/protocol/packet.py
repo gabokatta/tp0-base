@@ -101,10 +101,7 @@ class BetPacket(Packet):
         return MSG_BET
 
     def serialize_payload(self) -> bytes:
-        writer = ByteWriter()
-        writer.write_uint8(self.agency_id)
-        writer.write_bytes(self.bet.to_bytes())
-        return writer.get_bytes()
+        raise NotImplementedError("Server has no need to serialize BetPacket.")
 
     @classmethod
     def deserialize_payload(cls, data: bytes) -> 'BetPacket':
@@ -145,10 +142,7 @@ class ReplyPacket(Packet):
 
     @classmethod
     def deserialize_payload(cls, data: bytes) -> 'ReplyPacket':
-        reader = ByteReader(data)
-        done_count = reader.read_uint32()
-        message = reader.read_string()
-        return cls(done_count, message)
+        raise NotImplementedError("Client has no need to send ReplyPacket.")
 
 
 class ErrorPacket(Packet):
@@ -184,7 +178,4 @@ class ErrorPacket(Packet):
 
     @classmethod
     def deserialize_payload(cls, data: bytes) -> 'ErrorPacket':
-        reader = ByteReader(data)
-        error_code = reader.read_uint8()
-        message = reader.read_string()
-        return cls(error_code, message)
+        raise NotImplementedError("Client has no need to send ErrorPacket.")

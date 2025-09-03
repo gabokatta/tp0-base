@@ -85,19 +85,17 @@ func WritePacket(w io.Writer, packet Packet) error {
 }
 
 // DeserializePayload converts a byte slice into the appropriate Packet type
-// based on the messageType. Returns an error for unknown message types.
+// based on the messageType. Returns an error for unknown or invalid message types.
 func DeserializePayload(messageType uint8, payloadBytes []byte) (Packet, error) {
 	payloadReader := bytes.NewReader(payloadBytes)
 
 	switch messageType {
-	case MsgBet:
-		return DecodeBetPacket(payloadReader)
 	case MsgReply:
 		return DecodeReplyPacket(payloadReader)
 	case MsgError:
 		return DecodeErrorPacket(payloadReader)
 	default:
-		return nil, fmt.Errorf("unknown message type: %d", messageType)
+		return nil, fmt.Errorf("unknown/invalid message type from server: %d", messageType)
 	}
 }
 
@@ -122,21 +120,6 @@ func (p *BetPacket) Encode(w io.Writer) error {
 		return err
 	}
 	return p.Bet.Encode(w)
-}
-
-// DecodeBetPacket deserializes a BetPacket from an io.Reader.
-func DecodeBetPacket(r io.Reader) (*BetPacket, error) {
-	var agencyID uint8
-	if err := binary.Read(r, binary.BigEndian, &agencyID); err != nil {
-		return nil, err
-	}
-
-	var bet Bet
-	if err := bet.Decode(r); err != nil {
-		return nil, err
-	}
-
-	return &BetPacket{AgencyID: agencyID, Bet: bet}, nil
 }
 
 // NewBetPacket creates a new BetPacket from string agency ID and Bet.
@@ -169,20 +152,8 @@ type ReplyPacket struct {
 func (p *ReplyPacket) Type() uint8 { return MsgReply }
 
 // Encode serializes the ReplyPacket to an io.Writer.
-func (p *ReplyPacket) Encode(w io.Writer) error {
-	if err := binary.Write(w, binary.BigEndian, p.DoneCount); err != nil {
-		return err
-	}
-
-	msgBytes := []byte(p.Message)
-	if len(msgBytes) > 255 {
-		return errors.New("message too long")
-	}
-	if err := binary.Write(w, binary.BigEndian, uint8(len(msgBytes))); err != nil {
-		return err
-	}
-	_, err := w.Write(msgBytes)
-	return err
+func (p *ReplyPacket) Encode(_ io.Writer) error {
+	return errors.New("client has no need to send ReplyPacket")
 }
 
 // DecodeReplyPacket deserializes a ReplyPacket from an io.Reader.
@@ -225,20 +196,8 @@ type ErrorPacket struct {
 func (p *ErrorPacket) Type() uint8 { return MsgError }
 
 // Encode serializes the ErrorPacket to an io.Writer.
-func (p *ErrorPacket) Encode(w io.Writer) error {
-	if err := binary.Write(w, binary.BigEndian, p.ErrorCode); err != nil {
-		return err
-	}
-
-	msgBytes := []byte(p.Message)
-	if len(msgBytes) > 255 {
-		return errors.New("message too long")
-	}
-	if err := binary.Write(w, binary.BigEndian, uint8(len(msgBytes))); err != nil {
-		return err
-	}
-	_, err := w.Write(msgBytes)
-	return err
+func (p *ErrorPacket) Encode(_ io.Writer) error {
+	return errors.New("client has no need to send ErrorPacket")
 }
 
 // DecodeErrorPacket deserializes an ErrorPacket from an io.Reader.
