@@ -25,10 +25,12 @@ type BatchMaker struct {
 	reachedEOF bool
 }
 
+// Builds the string representation for the data to be sent for each agency.
 func getBetsLocation(clientID string) string {
 	return fmt.Sprintf("./.data/agency-%s.csv", clientID)
 }
 
+// NewBatchMaker returns a BatchMaker struct using the clientID, the SignalHandler and the BatchConfig.
 func NewBatchMaker(clientID string, config BatchConfig, signal *SignalHandler) (*BatchMaker, error) {
 	path := getBetsLocation(clientID)
 	log.Debugf("action: load_csv | result: in_progress | file: %s", path)
@@ -90,6 +92,7 @@ func (bm *BatchMaker) MakeBatch() ([]protocol.Bet, error) {
 	return bets, nil
 }
 
+// Using the CSV Reader, loads ONLY the next line of the csv and parses it into a Bet.
 func (bm *BatchMaker) readNextBet() (*protocol.Bet, error) {
 	record, err := bm.reader.Read()
 	if err == io.EOF {
@@ -108,6 +111,7 @@ func (bm *BatchMaker) readNextBet() (*protocol.Bet, error) {
 	return bet, nil
 }
 
+// Parses a record into a Bet struct.
 func (bm *BatchMaker) parseCSVRecord(record []string) (*protocol.Bet, error) {
 	if len(record) != 5 {
 		return nil, fmt.Errorf("invalid CSV record: expected exactly 5 fields, got %d", len(record))
@@ -119,6 +123,7 @@ func (bm *BatchMaker) parseCSVRecord(record []string) (*protocol.Bet, error) {
 	return protocol.NewBet(record[0], record[1], record[2], record[3], record[4])
 }
 
+// Checks if by adding a new Bet into the batch the size of it is still valid.
 func (bm *BatchMaker) canAddToBatch(currentBets []protocol.Bet, newBet protocol.Bet) bool {
 	if len(currentBets) == 0 {
 		return true
@@ -135,7 +140,7 @@ func (bm *BatchMaker) canAddToBatch(currentBets []protocol.Bet, newBet protocol.
 	return estimatedSize <= bm.config.MaxBytes
 }
 
-// estimateBatchSize mocks packet creation to see if current bets will fit the total byte limit.
+//  Mocks packet creation to see if current bets will fit the total byte limit.
 func (bm *BatchMaker) estimateBatchSize(bets []protocol.Bet) (uint32, error) {
 	packet, err := protocol.NewBetPacket(bm.clientID, bets)
 	if err != nil {
@@ -150,6 +155,7 @@ func (bm *BatchMaker) estimateBatchSize(bets []protocol.Bet) (uint32, error) {
 	return uint32(buf.Len()) + protocol.HeaderSize, nil
 }
 
+// Checks if the BatchMaker should stop building batches, this happens when a shutdown is received or we passed a threshold
 func (bm *BatchMaker) shouldStopBatch(bets []protocol.Bet) bool {
 	if bm.signal.ShouldShutdown() {
 		log.Infof("action: batch_processing | result: interrupted | client_id: %v | processed_bets: %v",
@@ -164,6 +170,7 @@ func (bm *BatchMaker) shouldStopBatch(bets []protocol.Bet) bool {
 	return false
 }
 
+// Close attempts to release all resources reserved by the BatchMaker, specifically the csv file.
 func (bm *BatchMaker) Close() error {
 	log.Debugf("action: closing_bet_file | status: in_progress")
 	if bm.csv != nil {

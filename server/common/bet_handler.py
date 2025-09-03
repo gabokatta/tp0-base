@@ -6,6 +6,10 @@ from common.utils import store_bets, Bet
 
 
 class BetHandler:
+    """
+    Handles bet packet processing and storage.
+    Validates packets, converts to domain objects, and stores using store_bets().
+    """
 
     @staticmethod
     def handle(packet: Packet) -> Packet:

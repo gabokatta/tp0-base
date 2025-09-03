@@ -53,7 +53,7 @@ func NewClient(clientConfig ClientConfig, batchConfig BatchConfig) (*Client, err
 }
 
 // StartClientLoop Handles the main logic-loop of the client application
-// Reads the CSV line by line, building a packet of maximum 8KBs, when the limit is reached a batch is sent.
+// Reads the CSV line by line, building a packet of n maximumBytes, when the limit is reached a batch is sent.
 // Temporary: Since server is not concurrent -> BatchSent means socket disconnect.
 func (c *Client) StartClientLoop() {
 	defer c.cleanup()
@@ -90,6 +90,7 @@ func (c *Client) StartClientLoop() {
 
 }
 
+// Sends a bet batch to the server and awaits the confirmation.
 func (c *Client) sendBetBatch(bets []protocol.Bet, batchID int) error {
 	log.Debugf("action: send_batch | result: in_progress | client_id: %v | batch_id: %v | bet_count: %v",
 		c.config.ID, batchID, len(bets))
@@ -119,6 +120,7 @@ func (c *Client) handleResponse(response protocol.Packet, bets []protocol.Bet, i
 	}
 }
 
+// closes up all open file descriptors.
 func (c *Client) cleanup() {
 	log.Infof("action: clean_up | result: in_progress | client_id: %v", c.config.ID)
 

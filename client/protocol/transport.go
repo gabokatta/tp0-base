@@ -48,6 +48,7 @@ func (n *Network) Disconnect() error {
 
 // SendBetBatch sends a batch of bets to the server and returns the response packet.
 // Creates the BetPacket internally and handles connection lifecycle.
+// After the function closes, the socket is closed (temporary)
 func (n *Network) SendBetBatch(clientID string, bets []Bet) (Packet, error) {
 	defer func() { _ = n.Disconnect() }()
 

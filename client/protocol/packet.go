@@ -161,7 +161,7 @@ func DecodeBetPacket(r io.Reader) (*BetPacket, error) {
 	return &BetPacket{AgencyID: agencyID, Bets: bets}, nil
 }
 
-// NewBetPacket creates a new BetPacket from string agency ID and Bet.
+// NewBetPacket creates a new BetPacket from string agency ID and a Bet slice.
 // Returns an error if the agency ID cannot be converted to uint8.
 func NewBetPacket(id string, bets []Bet) (*BetPacket, error) {
 	n, err := strconv.ParseUint(id, 10, 8)
