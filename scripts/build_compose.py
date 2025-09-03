@@ -80,7 +80,8 @@ def base_client(name: str, client_id: int):
         "image": "client:latest",
         "entrypoint": "/client",
         "environment": [
-            f"CLI_ID={client_id}"
+            f"CLI_ID={client_id}",
+            f"CLI_BATCH_MAXBYTES=8192"
         ],
         "volumes": [
             f"{os.path.abspath(CLIENT_BASE_PATH)}/config.yaml:/config.yaml",
