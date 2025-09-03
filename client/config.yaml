@@ -2,9 +2,9 @@
 server:
   address: "server:12345"
 loop:
-  period: "5s"
+  period: "50ms"
 log:
   level: "INFO"
 batch:
   maxBytes: 8192
-  maxAmount: 500
+  maxAmount: 275

@@ -34,7 +34,7 @@ class Server:
                     logging.error(f"action: accept_connection | result: fail | error: {e}")
 
         self._cleanup()
-        logging.error(f'action: graceful_shutdown | result: success')
+        logging.info(f'action: graceful_shutdown | result: success')
 
     def __handle_client_connection(self):
         """
@@ -85,7 +85,7 @@ class Server:
                 logging.error(f'action: server_socket_shutdown | result: fail | error: {e}')
 
     def shutdown(self):
-        logging.info('action: graceful_shutdown | result: in_progress')
+        logging.debug('action: graceful_shutdown | result: in_progress')
         self._alive = False
         # attempt to close server socket to make server quit waiting new connections.
         if not self._server_socket_closed:

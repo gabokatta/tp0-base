@@ -14,5 +14,5 @@ class Shutdown:
         self._server = server
 
     def trigger(self, signum, frame):
-        logging.warning(f'action: signal_received | result: in_progress | code: {signum}')
+        logging.debug(f'action: signal_received | result: in_progress | code: {signum}')
         self._server.shutdown()
