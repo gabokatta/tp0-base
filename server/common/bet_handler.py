@@ -78,7 +78,7 @@ class BetHandler:
     def _handle_winners(self, packet: GetWinnersPacket) -> Packet:
         """Handle winners query from agencies."""
         agency = packet.agency_id
-        logging.debug(f"action: handle_winners | result: in_progress | client_id: {agency}")
+        logging.info(f"action: consulta_ganadores | result: in_progress | client_id: {agency}")
 
         try:
             if not self.lottery_completed:
@@ -108,23 +108,18 @@ class BetHandler:
 
     def _start_lottery(self) -> None:
         """Perform the lottery calculation and cache results."""
-        logging.debug("action: sorteo | result: in_progress")
-
+        logging.info("action: sorteo | result: in_progress")
         try:
             self.winners = {agency_id: [] for agency_id in range(1, self.agency_amount + 1)}
             bets = list(load_bets())
-            total_bets = len(bets)
-
-            logging.debug(f"action: sorteo | result: processing | total_bets: {total_bets}")
 
             for bet in bets:
                 if has_won(bet):
                     agency_id = bet.agency
                     self.winners[agency_id].append(bet.document)
-                    logging.debug(f"action: sorteo | result: winner_found | agency_id: {agency_id}" +
-                                  f" | document: {bet.document}")
 
             self.lottery_completed = True
+            logging.info("action: sorteo | result: success")
         except Exception as e:
             logging.error(f"action: sorteo | result: fail | error: {e}")
             self.winners = {}

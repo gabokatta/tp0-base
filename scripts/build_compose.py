@@ -47,7 +47,7 @@ def sanitize_clients(n: str) -> int:
 
 
 def generate_docker_compose(file: str, clients: int):
-    compose = base_compose()
+    compose = base_compose(clients)
     for i in range(1, clients + 1):
         client_name = f"client{i}"
         client = base_client(client_name, i)
@@ -59,13 +59,14 @@ def generate_docker_compose(file: str, clients: int):
         yaml.dump(compose, f, default_flow_style=False, sort_keys=False, Dumper=CoolDumper)
 
 
-def base_server():
+def base_server(clients: int):
     return {
         "container_name": SERVER_SERVICE,
         "image": "server:latest",
         "entrypoint": "python3 /main.py",
         "environment": [
-            "PYTHONUNBUFFERED=1"
+            "PYTHONUNBUFFERED=1",
+            f"AGENCY_AMOUNT={clients}"
         ],
         "volumes": [
             f"{os.path.abspath(SERVER_BASE_PATH)}/config.ini:/config.ini",
@@ -83,7 +84,7 @@ def base_client(name: str, client_id: int):
             f"CLI_ID={client_id}",
             f"CLI_BATCH_MAXBYTES=8192",
             f"CLI_WINNERS_COOLDOWN=3s",
-            f"CLI_WINNERS_TIMEOUT=3m",
+            f"CLI_WINNERS_TIMEOUT=1m",
         ],
         "volumes": [
             f"{os.path.abspath(CLIENT_BASE_PATH)}/config.yaml:/config.yaml",
@@ -94,11 +95,11 @@ def base_client(name: str, client_id: int):
     }
 
 
-def base_compose():
+def base_compose(clients: int):
     return {
         "name": PROJECT_NAME,
         "services": {
-            SERVER_SERVICE: base_server()
+            SERVER_SERVICE: base_server(clients)
         },
         "networks": {
             NETWORK_NAME: {

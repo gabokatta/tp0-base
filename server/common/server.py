@@ -7,7 +7,7 @@ from protocol.transport import Network
 
 class Server:
 
-    def __init__(self, port, listen_backlog):
+    def __init__(self, port, listen_backlog, agency_amount):
         # Initialize server socket
         self._alive = True
         self._server_socket_closed = False
@@ -15,7 +15,7 @@ class Server:
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
         self._client_socket = None
-        self._bet_service = BetHandler(agency_amount=listen_backlog)
+        self._bet_service = BetHandler(agency_amount)
 
     def run(self):
         """

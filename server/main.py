@@ -38,6 +38,7 @@ def initialize_config():
             os.getenv('SERVER_LISTEN_BACKLOG', config["DEFAULT"]["SERVER_LISTEN_BACKLOG"])
         )
         config_params["logging_level"] = os.getenv('LOGGING_LEVEL', config["DEFAULT"]["LOGGING_LEVEL"])
+        config_params["agency_amount"] = os.getenv('AGENCY_AMOUNT')
     except KeyError as e:
         raise KeyError("Key was not found. Error: {} .Aborting server".format(e))
     except ValueError as e:
@@ -51,16 +52,17 @@ def main():
     logging_level = config_params["logging_level"]
     port = config_params["port"]
     listen_backlog = config_params["listen_backlog"]
+    agency_amount = config_params["agency_amount"]
 
     initialize_log(logging_level)
 
     # Log config parameters at the beginning of the program to verify the configuration
     # of the component
     logging.debug(f"action: config | result: success | port: {port} | "
-                  f"listen_backlog: {listen_backlog} | logging_level: {logging_level}")
+                  f"listen_backlog: {listen_backlog} | logging_level: {logging_level} | agency_amount: {agency_amount}")
 
     # Initialize server and start server loop
-    server = Server(port, listen_backlog)
+    server = Server(port, listen_backlog, agency_amount)
     set_shutdown_signals(Shutdown(server))
     server.run()
 

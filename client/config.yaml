@@ -10,4 +10,4 @@ batch:
   maxAmount: 275
 winners:
   cooldown: "3s"
-  timeout: "3m"
+  timeout: "1m"
