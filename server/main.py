@@ -38,7 +38,7 @@ def initialize_config():
             os.getenv('SERVER_LISTEN_BACKLOG', config["DEFAULT"]["SERVER_LISTEN_BACKLOG"])
         )
         config_params["logging_level"] = os.getenv('LOGGING_LEVEL', config["DEFAULT"]["LOGGING_LEVEL"])
-        config_params["agency_amount"] = os.getenv('AGENCY_AMOUNT')
+        config_params["agency_amount"] = int(os.getenv('AGENCY_AMOUNT'))
     except KeyError as e:
         raise KeyError("Key was not found. Error: {} .Aborting server".format(e))
     except ValueError as e:

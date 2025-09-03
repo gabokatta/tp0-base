@@ -13,11 +13,11 @@ class BetHandler:
     Validates packets, converts to domain objects, and stores using store_bets().
     """
 
-    def __init__(self, agency_amount: int):
-        self.ready_agencies: Set[int] = set()
-        self.agency_amount = agency_amount
+    def __init__(self, agency_amount):
+        self.agency_amount: int = agency_amount
+        self.lottery_is_done: bool = False
         self.winners: Dict[int, List[str]] = {}
-        self.lottery_completed = False
+        self.ready_agencies: Set[int] = set()
 
     def handle(self, packet: Packet) -> Packet:
         if not packet:
@@ -38,8 +38,8 @@ class BetHandler:
     def _handle_bets(packet: BetPacket) -> Packet:
         """Handle incoming bet packets - store bets and return confirmation."""
         agency = packet.agency_id
-        logging.debug(f"action: handle_bets | result: in_progress | client_id: {agency}" +
-                      f" | bet_count: {len(packet.bets)}")
+        logging.info(f"action: handle_bets | result: in_progress | client_id: {agency}" +
+                     f" | bet_count: {len(packet.bets)}")
 
         try:
             parsed_bets = ProtocolBet.to_domain_list(agency, packet.bets)
@@ -61,7 +61,7 @@ class BetHandler:
     def _handle_finish(self, packet: BetFinishPacket) -> Packet:
         """Handle finish notification from agencies."""
         agency = packet.agency_id
-        logging.debug(f"action: handle_finish | result: in_progress | client_id: {agency}")
+        logging.info(f"action: finish_ack | result: in_progress | client_id: {agency}")
         try:
             self.ready_agencies.add(agency)
             logging.info(f"action: finish_ack | result: success | client_id: {agency} |" +
@@ -81,7 +81,7 @@ class BetHandler:
         logging.info(f"action: consulta_ganadores | result: in_progress | client_id: {agency}")
 
         try:
-            if not self.lottery_completed:
+            if not self.lottery_is_done:
                 ready_count = len(self.ready_agencies)
                 logging.info(f"action: consulta_ganadores | result: lottery_not_ready | client_id: {agency} |" +
                              f" ready_agencies: {ready_count}/{self.agency_amount}")
@@ -104,7 +104,7 @@ class BetHandler:
 
     def _should_start_lottery(self) -> bool:
         """Check if conditions are met to start the lottery."""
-        return len(self.ready_agencies) == self.agency_amount and not self.lottery_completed
+        return len(self.ready_agencies) == self.agency_amount and not self.lottery_is_done
 
     def _start_lottery(self) -> None:
         """Perform the lottery calculation and cache results."""
@@ -118,10 +118,9 @@ class BetHandler:
                     agency_id = bet.agency
                     self.winners[agency_id].append(bet.document)
 
-            self.lottery_completed = True
+            self.lottery_is_done = True
             logging.info("action: sorteo | result: success")
         except Exception as e:
             logging.error(f"action: sorteo | result: fail | error: {e}")
             self.winners = {}
-            self.lottery_completed = False
             raise

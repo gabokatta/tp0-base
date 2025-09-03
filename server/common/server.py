@@ -47,7 +47,7 @@ class Server:
             try:
                 network = Network(s)
                 packet = network.recv()
-                logging.info(f"action: receive_message | result: in_progress | ip: {s.getpeername()}")
+                logging.debug(f"action: receive_message | result: in_progress | ip: {s.getpeername()}")
                 response = self._bet_service.handle(packet)
                 network.send(response)
             except ConnectionError as e:
