@@ -296,7 +296,7 @@ type ErrorPacket struct {
 func (p *ErrorPacket) Type() uint8 { return MsgError }
 
 // Encode serializes the ErrorPacket to an io.Writer.
-func (p *ErrorPacket) Encode(w io.Writer) error {
+func (p *ErrorPacket) Encode(_ io.Writer) error {
 	return errors.New("client has no need to send ErrorPacket")
 }
 
