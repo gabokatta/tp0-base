@@ -11,15 +11,19 @@ import (
 
 // Message type constants for different packet types.
 const (
-	MsgBet   = 0x01 // BetPacket message type
-	MsgReply = 0x02 // ReplyPacket message type
-	MsgError = 0x03 // ErrorPacket message type
+	MsgBet          = 0x01 // BetPacket message type
+	MsgReply        = 0x02 // ReplyPacket message type
+	MsgFinish       = 0x03 // BetFinishPacket message type
+	MsgGetWinners   = 0x04 // GetWinnersPacket message type
+	MsgReplyWinners = 0x05 // ReplyWinnersPacket message type
+	MsgError        = 0x06 // ErrorPacket message type
 )
 
 // Error code constants for ErrorPacket.
 const (
 	ErrInvalidPacket  = 0x01 // Invalid packet structure error
 	ErrInvalidBetData = 0x02 // Invalid bet data error
+	ErrLotteryNotDone = 0x03 // Lottery is not done error
 )
 
 /*
@@ -85,19 +89,19 @@ func WritePacket(w io.Writer, packet Packet) error {
 }
 
 // DeserializePayload converts a byte slice into the appropriate Packet type
-// based on the messageType. Returns an error for unknown message types.
+// based on the messageType. Returns an error for unknown or invalid message types.
 func DeserializePayload(messageType uint8, payloadBytes []byte) (Packet, error) {
 	payloadReader := bytes.NewReader(payloadBytes)
 
 	switch messageType {
-	case MsgBet:
-		return DecodeBetPacket(payloadReader)
 	case MsgReply:
 		return DecodeReplyPacket(payloadReader)
+	case MsgReplyWinners:
+		return DecodeReplyWinnersPacket(payloadReader)
 	case MsgError:
 		return DecodeErrorPacket(payloadReader)
 	default:
-		return nil, fmt.Errorf("unknown message type: %d", messageType)
+		return nil, fmt.Errorf("unknown/invalid message type from server: %d", messageType)
 	}
 }
 
@@ -136,31 +140,6 @@ func (p *BetPacket) Encode(w io.Writer) error {
 	return nil
 }
 
-// DecodeBetPacket deserializes a BetPacket from an io.Reader.
-func DecodeBetPacket(r io.Reader) (*BetPacket, error) {
-	var agencyID uint8
-	if err := binary.Read(r, binary.BigEndian, &agencyID); err != nil {
-		return nil, err
-	}
-
-	var betN uint32
-	if err := binary.Read(r, binary.BigEndian, &betN); err != nil {
-		return nil, err
-	}
-
-	bets := make([]Bet, 0, betN)
-
-	for i := uint32(0); i < betN; i++ {
-		var bet Bet
-		if err := bet.Decode(r); err != nil {
-			return nil, err
-		}
-		bets = append(bets, bet)
-	}
-
-	return &BetPacket{AgencyID: agencyID, Bets: bets}, nil
-}
-
 // NewBetPacket creates a new BetPacket from string agency ID and a Bet slice.
 // Returns an error if the agency ID cannot be converted to uint8.
 func NewBetPacket(id string, bets []Bet) (*BetPacket, error) {
@@ -191,20 +170,8 @@ type ReplyPacket struct {
 func (p *ReplyPacket) Type() uint8 { return MsgReply }
 
 // Encode serializes the ReplyPacket to an io.Writer.
-func (p *ReplyPacket) Encode(w io.Writer) error {
-	if err := binary.Write(w, binary.BigEndian, p.DoneCount); err != nil {
-		return err
-	}
-
-	msgBytes := []byte(p.Message)
-	if len(msgBytes) > 255 {
-		return errors.New("message too long")
-	}
-	if err := binary.Write(w, binary.BigEndian, uint8(len(msgBytes))); err != nil {
-		return err
-	}
-	_, err := w.Write(msgBytes)
-	return err
+func (p *ReplyPacket) Encode(_ io.Writer) error {
+	return errors.New("client has no need to send ReplyPacket")
 }
 
 // DecodeReplyPacket deserializes a ReplyPacket from an io.Reader.
@@ -231,6 +198,88 @@ func DecodeReplyPacket(r io.Reader) (*ReplyPacket, error) {
 }
 
 /*
+BetFinishPacket represents an agency message to the server in order to signal no more bets.
+
+The packet structure is:
+- 1 Byte for agency ID.
+*/
+type BetFinishPacket struct {
+	AgencyID uint8
+}
+
+// Type returns the message type identifier for BetFinishPacket.
+func (b *BetFinishPacket) Type() uint8 { return MsgFinish }
+
+// Encode serializes the BetFinishPacket to an io.Writer.
+func (b *BetFinishPacket) Encode(w io.Writer) error {
+	return binary.Write(w, binary.BigEndian, b.AgencyID)
+}
+
+/*
+GetWinnersPacket represents an agency message to the server in order to query its winners.
+
+The packet structure is:
+- 1 Byte for agency ID.
+*/
+type GetWinnersPacket struct {
+	AgencyID uint8
+}
+
+// Type returns the message type identifier for GetWinnersPacket.
+func (g *GetWinnersPacket) Type() uint8 { return MsgGetWinners }
+
+// Encode serializes the GetWinnersPacket to an io.Writer.
+func (g *GetWinnersPacket) Encode(w io.Writer) error {
+	return binary.Write(w, binary.BigEndian, g.AgencyID)
+}
+
+/*
+ReplyWinnersPacket represents a server response to a client request for winners.
+
+The packet structure is:
+- 1 Byte for AgencyID
+- 4 Bytes for amount of winners
+- N * 4 Bytes for all the winner document numbers (uint32, big-endian)
+*/
+type ReplyWinnersPacket struct {
+	AgencyID uint8
+	Winners  []uint32
+}
+
+// Type returns the message type identifier for ReplyWinnersPacket.
+func (r *ReplyWinnersPacket) Type() uint8 { return MsgReplyWinners }
+
+// Encode serializes the ReplyWinnersPacket to an io.Writer.
+func (r *ReplyWinnersPacket) Encode(_ io.Writer) error {
+	return errors.New("client has no need to send ReplyWinnersPacket")
+}
+
+// DecodeReplyWinnersPacket deserializes a ReplyWinnersPacket from an io.Reader.
+func DecodeReplyWinnersPacket(r io.Reader) (*ReplyWinnersPacket, error) {
+	var agencyID uint8
+	if err := binary.Read(r, binary.BigEndian, &agencyID); err != nil {
+		return nil, fmt.Errorf("reading agency ID: %w", err)
+	}
+
+	var winnerCount uint32
+	if err := binary.Read(r, binary.BigEndian, &winnerCount); err != nil {
+		return nil, fmt.Errorf("reading winner count: %w", err)
+	}
+
+	winners := make([]uint32, winnerCount)
+	for i := uint32(0); i < winnerCount; i++ {
+		if err := binary.Read(r, binary.BigEndian, &winners[i]); err != nil {
+			return nil, fmt.Errorf("reading winner %d: %w", i, err)
+		}
+	}
+
+	return &ReplyWinnersPacket{
+		AgencyID: agencyID,
+		Winners:  winners,
+	}, nil
+}
+
+/*
 ErrorPacket represents an error response from the server.
 
 The packet structure is:
@@ -248,19 +297,7 @@ func (p *ErrorPacket) Type() uint8 { return MsgError }
 
 // Encode serializes the ErrorPacket to an io.Writer.
 func (p *ErrorPacket) Encode(w io.Writer) error {
-	if err := binary.Write(w, binary.BigEndian, p.ErrorCode); err != nil {
-		return err
-	}
-
-	msgBytes := []byte(p.Message)
-	if len(msgBytes) > 255 {
-		return errors.New("message too long")
-	}
-	if err := binary.Write(w, binary.BigEndian, uint8(len(msgBytes))); err != nil {
-		return err
-	}
-	_, err := w.Write(msgBytes)
-	return err
+	return errors.New("client has no need to send ErrorPacket")
 }
 
 // DecodeErrorPacket deserializes an ErrorPacket from an io.Reader.
@@ -293,6 +330,8 @@ func ErrorFromPacket(e ErrorPacket) string {
 		return "INVALID_PACKET"
 	case ErrInvalidBetData:
 		return "INVALID_BET"
+	case ErrLotteryNotDone:
+		return "LOTTERY_IN_PROGRESS"
 	default:
 		return "UNKNOWN_ERROR"
 	}

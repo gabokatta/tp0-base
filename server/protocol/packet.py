@@ -5,7 +5,10 @@ from protocol.utils import ByteReader, ByteWriter
 
 MSG_BET = 0x01
 MSG_REPLY = 0x02
-MSG_ERROR = 0x03
+MSG_FINISH = 0X03
+MSG_GET_WINNERS = 0X04
+MSG_REPLY_WINNERS = 0X05
+MSG_ERROR = 0x06
 
 
 class Header:
@@ -73,6 +76,9 @@ class Packet(ABC):
         packet_classes = {
             MSG_BET: BetPacket,
             MSG_REPLY: ReplyPacket,
+            MSG_FINISH: BetFinishPacket,
+            MSG_GET_WINNERS: GetWinnersPacket,
+            MSG_REPLY_WINNERS: ReplyWinnersPacket,
             MSG_ERROR: ErrorPacket,
         }
 
@@ -102,12 +108,7 @@ class BetPacket(Packet):
         return MSG_BET
 
     def serialize_payload(self) -> bytes:
-        writer = ByteWriter()
-        writer.write_uint8(self.agency_id)
-        writer.write_uint32(len(self.bets))
-        for bet in self.bets:
-            writer.write_bytes(bet.to_bytes())
-        return writer.get_bytes()
+        raise NotImplementedError("Server has no need to serialize BetPacket.")
 
     @classmethod
     def deserialize_payload(cls, data: bytes) -> 'BetPacket':
@@ -147,10 +148,85 @@ class ReplyPacket(Packet):
 
     @classmethod
     def deserialize_payload(cls, data: bytes) -> 'ReplyPacket':
+        raise NotImplementedError("Client has no need to send ReplyPacket.")
+
+
+class BetFinishPacket(Packet):
+    """
+    BetFinish Packet Payload structure:
+        - 1 Byte: agency_id (uint8) - Identifier for the betting agency
+
+    This packet signals that an agency has finished sending bets.
+    """
+
+    def __init__(self, agency_id: int):
+        self.agency_id: int = agency_id
+
+    def get_message_type(self) -> int:
+        return MSG_FINISH
+
+    def serialize_payload(self) -> bytes:
+        raise NotImplementedError("Server has no need to serialize BetFinishPacket.")
+
+    @classmethod
+    def deserialize_payload(cls, data: bytes) -> 'BetFinishPacket':
         reader = ByteReader(data)
-        done_count = reader.read_uint32()
-        message = reader.read_string()
-        return cls(done_count, message)
+        agency_id = reader.read_uint8()
+        return cls(agency_id)
+
+
+class GetWinnersPacket(Packet):
+    """
+    GetWinners Packet Payload structure:
+        - 1 Byte: agency_id (uint8) - Identifier for the betting agency
+
+    This packet requests winners from the server.
+    """
+
+    def __init__(self, agency_id: int):
+        self.agency_id: int = agency_id
+
+    def get_message_type(self) -> int:
+        return MSG_GET_WINNERS
+
+    def serialize_payload(self) -> bytes:
+        raise NotImplementedError("Server has no need to serialize GetWinnersPacket.")
+
+    @classmethod
+    def deserialize_payload(cls, data: bytes) -> 'GetWinnersPacket':
+        reader = ByteReader(data)
+        agency_id = reader.read_uint8()
+        return cls(agency_id)
+
+
+class ReplyWinnersPacket(Packet):
+    """
+    ReplyWinners Packet Payload structure:
+        - 1 Byte: agency_id (uint8) - Identifier for the betting agency
+        - 4 Bytes: winner_count (uint32) - Number of winners
+        - N * 4 Bytes: winners (uint32 list) - Winner document numbers
+
+    This packet contains the winners list from the server.
+    """
+
+    def __init__(self, agency_id: int, winners: [int]):
+        self.agency_id: int = agency_id
+        self.winners: [int] = winners
+
+    def get_message_type(self) -> int:
+        return MSG_REPLY_WINNERS
+
+    def serialize_payload(self) -> bytes:
+        writer = ByteWriter()
+        writer.write_uint8(self.agency_id)
+        writer.write_uint32(len(self.winners))
+        for winner in self.winners:
+            writer.write_uint32(winner)
+        return writer.get_bytes()
+
+    @classmethod
+    def deserialize_payload(cls, data: bytes) -> 'ReplyWinnersPacket':
+        raise NotImplementedError("Client has no need to send ReplyWinnersPacket.")
 
 
 class ErrorPacket(Packet):
@@ -165,10 +241,12 @@ class ErrorPacket(Packet):
 
     INVALID_PACKET = 0x01
     INVALID_BET = 0x02
+    LOTTERY_NOT_DONE = 0x03
 
     CODES = {
         INVALID_PACKET: "BAD_PACKET",
         INVALID_BET: "BAD_BET",
+        LOTTERY_NOT_DONE: "LOTTERY_NOT_DONE",
     }
 
     def __init__(self, error_code: int, message: str = ""):
@@ -186,7 +264,4 @@ class ErrorPacket(Packet):
 
     @classmethod
     def deserialize_payload(cls, data: bytes) -> 'ErrorPacket':
-        reader = ByteReader(data)
-        error_code = reader.read_uint8()
-        message = reader.read_string()
-        return cls(error_code, message)
+        raise NotImplementedError("Client has no need to send ErrorPacket.")
