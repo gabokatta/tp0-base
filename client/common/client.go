@@ -16,6 +16,7 @@ type ClientConfig struct {
 	ServerAddress   string
 	LoopPeriod      time.Duration
 	WinnersCooldown time.Duration
+	WinnersTimeout  time.Duration
 }
 
 // Client responsible for managing outgoing connections to the server.
@@ -142,10 +143,14 @@ func (c *Client) sendFinish() error {
 // Starts a connection loop with the server to check if the winners are available.
 // To avoid crowding the server, after a connection the socket is closed.
 // If the reply is a list of winners the loop breaks, if not, we sleep and ask again later.
+// In the case that the server is not able to finish the lottery in WinnersTimeout, we return an error.
 func (c *Client) getWinners() error {
+
 	log.Debugf("action: consulta_ganadores | result: in_progress | client_id: %v", c.config.ID)
 
-	for {
+	timeout := time.Now().Add(c.config.WinnersTimeout)
+
+	for time.Now().Before(timeout) {
 
 		res, err := c.network.SendWinnersRequest(c.config.ID)
 		if err != nil {
@@ -160,15 +165,18 @@ func (c *Client) getWinners() error {
 		}
 
 		if winners != nil {
-			break
+			return nil
 		}
 
 		if lotteryNotDone != nil {
 			time.Sleep(c.config.WinnersCooldown)
+			continue
 		}
 	}
 
-	return nil
+	log.Errorf("action: consulta_ganadores | result: timeout | client_id: %v | timeout: %v",
+		c.config.ID, c.config.WinnersTimeout)
+	return fmt.Errorf("timeout waiting for lottery results after %v", c.config.WinnersTimeout)
 }
 
 // Given the server response to the bets, this function takes into account the different packet types in order to act.
@@ -209,14 +217,13 @@ func (c *Client) handleWinnersResponse(response protocol.Packet) (*protocol.Repl
 		log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %v", len(resp.Winners))
 		return resp, nil, nil
 	case *protocol.ErrorPacket:
+		if resp.ErrorCode == protocol.ErrLotteryNotDone {
+			log.Debugf("action: consulta_ganadores | result: lottery_not_ready | client_id: %v", c.config.ID)
+			return nil, resp, nil
+		}
 		log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error_code: %v | msg: %v",
 			c.config.ID, protocol.ErrorFromPacket(*resp), resp.Message)
-		if resp.ErrorCode == protocol.ErrLotteryNotDone {
-			// we continue to wait for all others bet to finish.
-			return nil, resp, nil
-		} else {
-			return nil, nil, errors.New("server had internal error while calculating winners")
-		}
+		return nil, nil, errors.New("server had internal error while calculating winners")
 	default:
 		log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: unknown_response_type", c.config.ID)
 		return nil, nil, errors.New("server responded with an invalid error type")

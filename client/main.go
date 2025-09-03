@@ -38,6 +38,7 @@ func InitConfig() (*viper.Viper, error) {
 	v.BindEnv("log", "level")
 	v.BindEnv("batch", "maxBytes")
 	v.BindEnv("winners", "cooldown")
+	v.BindEnv("winners", "timeout")
 
 	// Try to read configuration from config file. If config file
 	// does not exists then ReadInConfig will fail but configuration
@@ -86,7 +87,8 @@ func InitLogger(logLevel string) error {
 // PrintConfig Print all the configuration parameters of the program.
 // For debugging purposes only
 func PrintConfig(v *viper.Viper) {
-	log.Infof("action: config | result: success | client_id: %s | server_address: %s | loop_period: %v | log_level: %s | batch_bytes: %v | batch_amount: %v| winners_cooldown: %v",
+	log.Infof("action: config | result: success | client_id: %s | server_address: %s | loop_period: %v |"+
+		" log_level: %s | batch_bytes: %v | batch_amount: %v | winners_cooldown: %v | winners_timeout: %v",
 		v.GetString("id"),
 		v.GetString("server.address"),
 		v.GetDuration("loop.period"),
@@ -94,6 +96,7 @@ func PrintConfig(v *viper.Viper) {
 		v.GetUint32("batch.maxBytes"),
 		v.GetUint32("batch.maxAmount"),
 		v.GetDuration("winners.cooldown"),
+		v.GetDuration("winners.timeout"),
 	)
 }
 
@@ -115,6 +118,7 @@ func main() {
 		ID:              v.GetString("id"),
 		LoopPeriod:      v.GetDuration("loop.period"),
 		WinnersCooldown: v.GetDuration("winners.cooldown"),
+		WinnersTimeout:  v.GetDuration("winners.timeout"),
 	}
 
 	batchConfig := common.BatchConfig{
