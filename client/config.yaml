@@ -2,7 +2,7 @@
 server:
   address: "server:12345"
 loop:
-  period: "50ms"
+  period: "100ms"
 log:
   level: "INFO"
 batch:
