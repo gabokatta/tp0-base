@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/protocol"
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/shutdown"
 	"io"
 	"os"
 	"strings"
@@ -20,7 +21,7 @@ type BatchMaker struct {
 	clientID   string
 	csv        *os.File
 	reader     *csv.Reader
-	signal     *SignalHandler
+	signal     *shutdown.SignalHandler
 	config     BatchConfig
 	reachedEOF bool
 }
@@ -31,7 +32,7 @@ func getBetsLocation(clientID string) string {
 }
 
 // NewBatchMaker returns a BatchMaker struct using the clientID, the SignalHandler and the BatchConfig.
-func NewBatchMaker(clientID string, config BatchConfig, signal *SignalHandler) (*BatchMaker, error) {
+func NewBatchMaker(clientID string, config BatchConfig, signal *shutdown.SignalHandler) (*BatchMaker, error) {
 	path := getBetsLocation(clientID)
 	log.Debugf("action: load_csv | result: in_progress | file: %s", path)
 	file, err := os.Open(path)

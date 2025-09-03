@@ -3,6 +3,7 @@ package common
 import (
 	"errors"
 	"fmt"
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/shutdown"
 	"time"
 
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/protocol"
@@ -24,7 +25,7 @@ type ClientConfig struct {
 // The Network struct allows it to safely send messages to the server.
 type Client struct {
 	config     ClientConfig
-	signal     *SignalHandler
+	signal     *shutdown.SignalHandler
 	network    *protocol.Network
 	batchMaker *BatchMaker
 }
@@ -35,7 +36,7 @@ type Client struct {
 // A BatchMaker is created for bet batch processing.
 func NewClient(clientConfig ClientConfig, batchConfig BatchConfig) (*Client, error) {
 
-	signal := NewSignalHandler()
+	signal := shutdown.NewSignalHandler()
 	network := protocol.NewNetwork(clientConfig.ServerAddress, signal)
 	batchMaker, err := NewBatchMaker(
 		clientConfig.ID,
@@ -114,7 +115,7 @@ func (c *Client) sendBets() error {
 
 // Sends a bet batch to the server and awaits the confirmation.
 func (c *Client) sendSingleBatch(bets []protocol.Bet, batchID int) error {
-	log.Debugf("action: send_batch | result: in_progress | client_id: %v | batch_id: %v | bet_count: %v",
+	log.Infof("action: send_batch | result: in_progress | client_id: %v | batch_id: %v | bet_count: %v",
 		c.config.ID, batchID, len(bets))
 
 	response, err := c.network.SendBetBatch(c.config.ID, bets)
@@ -146,7 +147,7 @@ func (c *Client) sendFinish() error {
 // In the case that the server is not able to finish the lottery in WinnersTimeout, we return an error.
 func (c *Client) getWinners() error {
 
-	log.Debugf("action: consulta_ganadores | result: in_progress | client_id: %v", c.config.ID)
+	log.Infof("action: consulta_ganadores | result: in_progress | client_id: %v", c.config.ID)
 
 	timeout := time.Now().Add(c.config.WinnersTimeout)
 

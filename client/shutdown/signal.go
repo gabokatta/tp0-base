@@ -1,11 +1,14 @@
-package common
+package shutdown
 
 import (
 	"context"
+	"github.com/op/go-logging"
 	"os"
 	"os/signal"
 	"syscall"
 )
+
+var log = logging.MustGetLogger("log")
 
 type SignalHandler struct {
 	channel chan os.Signal

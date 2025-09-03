@@ -15,7 +15,7 @@ class Server:
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
         self._client_socket = None
-        self._bet_service = BetHandler()
+        self._bet_service = BetHandler(agency_amount=listen_backlog)
 
     def run(self):
         """

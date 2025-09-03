@@ -3,7 +3,7 @@ package protocol
 import (
 	"bytes"
 	"fmt"
-	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/common"
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/shutdown"
 	"io"
 	"net"
 )
@@ -13,11 +13,11 @@ import (
 type Network struct {
 	serverAddress string
 	conn          net.Conn
-	signal        *common.SignalHandler
+	signal        *shutdown.SignalHandler
 }
 
 // NewNetwork creates a new Network instance with the specified server address.
-func NewNetwork(serverAddress string, signal *common.SignalHandler) *Network {
+func NewNetwork(serverAddress string, signal *shutdown.SignalHandler) *Network {
 	return &Network{
 		serverAddress: serverAddress,
 		signal:        signal,
