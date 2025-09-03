@@ -3,6 +3,7 @@ package protocol
 import (
 	"bytes"
 	"fmt"
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/common"
 	"io"
 	"net"
 )
@@ -12,16 +13,20 @@ import (
 type Network struct {
 	serverAddress string
 	conn          net.Conn
+	signal        *common.SignalHandler
 }
 
 // NewNetwork creates a new Network instance with the specified server address.
-func NewNetwork(serverAddress string) *Network {
-	return &Network{serverAddress: serverAddress}
+func NewNetwork(serverAddress string, signal *common.SignalHandler) *Network {
+	return &Network{
+		serverAddress: serverAddress,
+		signal:        signal,
+	}
 }
 
 // Connect establishes a TCP connection to the server.
 // Returns an error if the connection cannot be established.
-func (n *Network) Connect() error {
+func (n *Network) connect() error {
 	if n.conn != nil {
 		return nil
 	}
@@ -57,15 +62,69 @@ func (n *Network) SendBetBatch(clientID string, bets []Bet) (Packet, error) {
 		return nil, fmt.Errorf("failed to create bet packet: %w", err)
 	}
 
-	if err := n.Connect(); err != nil {
+	if err := n.connect(); err != nil {
 		return nil, err
 	}
 
-	if err := n.Send(packet); err != nil {
+	if err := n.send(packet); err != nil {
 		return nil, err
 	}
 
-	response, err := n.Recv()
+	response, err := n.recv()
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+// SendFinishBet sends the FinishBet notification to the server.
+// Creates the BetFinishPacket internally and handles connection lifecycle.
+// After the function closes, the socket is closed (temporary)
+func (n *Network) SendFinishBet(clientID string) (Packet, error) {
+	defer func() { _ = n.Disconnect() }()
+
+	packet, err := NewBetFinishPacket(clientID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create betFinish packet: %w", err)
+	}
+
+	if err := n.connect(); err != nil {
+		return nil, err
+	}
+
+	if err := n.send(packet); err != nil {
+		return nil, err
+	}
+
+	response, err := n.recv()
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+// SendWinnersRequest sends the GetWinnersPacket to the server.
+// Creates the GetWinnersPacket internally and handles connection lifecycle.
+// After the function closes, the socket is closed (temporary)
+func (n *Network) SendWinnersRequest(clientID string) (Packet, error) {
+	defer func() { _ = n.Disconnect() }()
+
+	packet, err := NewGetWinnersPacket(clientID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GetWinnersPacket packet: %w", err)
+	}
+
+	if err := n.connect(); err != nil {
+		return nil, err
+	}
+
+	if err := n.send(packet); err != nil {
+		return nil, err
+	}
+
+	response, err := n.recv()
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +134,7 @@ func (n *Network) SendBetBatch(clientID string, bets []Bet) (Packet, error) {
 
 // Send writes a packet to the network connection.
 // Returns an error if the connection is closed or packet encoding fails.
-func (n *Network) Send(packet Packet) error {
+func (n *Network) send(packet Packet) error {
 	if n.conn == nil {
 		return net.ErrClosed
 	}
@@ -90,7 +149,7 @@ func (n *Network) Send(packet Packet) error {
 
 // Recv reads a packet from the network connection.
 // Returns an error if the connection is closed or packet decoding fails.
-func (n *Network) Recv() (Packet, error) {
+func (n *Network) recv() (Packet, error) {
 	if n.conn == nil {
 		return nil, net.ErrClosed
 	}
@@ -121,6 +180,11 @@ func (n *Network) recvExact(nBytes int) ([]byte, error) {
 	bytesRead := 0
 
 	for bytesRead < nBytes {
+
+		if n.signal.ShouldShutdown() {
+			return nil, fmt.Errorf("operation cancelled due to shutdown signal")
+		}
+
 		n, err := n.conn.Read(buf[bytesRead:])
 		if err != nil {
 			if err == io.EOF && bytesRead > 0 {
@@ -145,6 +209,11 @@ func (n *Network) writeExact(data []byte) (int, error) {
 	totalBytes := len(data)
 
 	for bytesWritten < totalBytes {
+
+		if n.signal.ShouldShutdown() {
+			return bytesWritten, fmt.Errorf("operation cancelled due to shutdown signal")
+		}
+
 		n, err := n.conn.Write(data[bytesWritten:])
 		if err != nil {
 			return bytesWritten, err

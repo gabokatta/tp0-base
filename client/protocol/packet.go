@@ -215,6 +215,18 @@ func (b *BetFinishPacket) Encode(w io.Writer) error {
 	return binary.Write(w, binary.BigEndian, b.AgencyID)
 }
 
+// NewBetFinishPacket creates a new BetFinishPacket from string agency ID.
+// Returns an error if the agency ID cannot be converted to uint8.
+func NewBetFinishPacket(id string) (*BetFinishPacket, error) {
+	n, err := strconv.ParseUint(id, 10, 8)
+	if err != nil {
+		return nil, err
+	}
+	return &BetFinishPacket{
+		AgencyID: uint8(n),
+	}, nil
+}
+
 /*
 GetWinnersPacket represents an agency message to the server in order to query its winners.
 
@@ -231,6 +243,18 @@ func (g *GetWinnersPacket) Type() uint8 { return MsgGetWinners }
 // Encode serializes the GetWinnersPacket to an io.Writer.
 func (g *GetWinnersPacket) Encode(w io.Writer) error {
 	return binary.Write(w, binary.BigEndian, g.AgencyID)
+}
+
+// NewGetWinnersPacket creates a new GetWinnersPacket from string agency ID.
+// Returns an error if the agency ID cannot be converted to uint8.
+func NewGetWinnersPacket(id string) (*GetWinnersPacket, error) {
+	n, err := strconv.ParseUint(id, 10, 8)
+	if err != nil {
+		return nil, err
+	}
+	return &GetWinnersPacket{
+		AgencyID: uint8(n),
+	}, nil
 }
 
 /*
