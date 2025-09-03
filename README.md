@@ -194,6 +194,10 @@ La corrección personal tendrá en cuenta la calidad del código entregado y cas
 
 En esta sección se describirán las decisiones de diseño de cada uno de los ejercicios de manera incremental y además se describiran aquellos cambios importantes que se realizaron a la estructura base del TP.
 
+> [!TIP]
+>
+> Los ejercicios en cada una de sus branches pueden ser levantados haciendo uso de los comandos del MAKEFILE original de la catedra.
+
 ## Ejercicio N°1: Script para generar DockerCompose
 
 ----
@@ -798,3 +802,188 @@ Se agregaron variables de entorno temporales para las apuestas en el script gene
  - Códigos de error específicos (`INVALID_PACKET`, `INVALID_BET`)
  - Mensajes descriptivos en respuestas de error
 
+## Ejercicio Nº6: Procesamiento por Batches
+
+----
+
+<h4 align="center"><a href="https://github.com/gabokatta/tp0-base/compare/ej5...gabokatta:tp0-base:ej6?expand=1">diff - ej5</a></h4>
+
+---
+
+### Diseño de la Solución
+
+Este ejercicio introdujo el procesamiento por lotes (_batches_) donde los clientes pueden enviar múltiples apuestas en una sola consulta, reduciendo significativamente los tiempos de transmisión y procesamiento.
+
+#### Cambios en el Protocolo de Comunicación
+
+**Modificación del BetPacket:**
+El protocolo se extendió para soportar múltiples apuestas por paquete:
+
+```
+BetPacket estructura actualizada:
+- 1 Byte: agency_id (uint8)
+- 4 Bytes: bet_count (uint32) - Nueva: cantidad de apuestas en el batch
+- N × Bet data: Lista de apuestas (estructura individual sin cambios)
+```
+
+**Implementación en Go:**
+```go
+type BetPacket struct {
+    AgencyID uint8
+    Bets     []Bet  // Cambió de Bet único a slice de Bets
+}
+```
+
+**Implementación en Python:**
+```python
+class BetPacket(Packet):
+    def __init__(self, agency_id: int, bets: [ProtocolBet]):
+        self.agency_id: int = agency_id
+        self.bets: [ProtocolBet] = bets  # Lista de apuestas
+```
+
+#### Sistema BatchMaker (Cliente)
+
+Se creó la clase `BatchMaker` en [`batch.go`](client/common/batch.go) que maneja:
+
+**Carga de Datos:**
+- Lectura directa de archivos CSV desde `.data/agency-{N}.csv`
+- Parser robusto que maneja espacios en blanco y validaciones
+- Procesamiento línea por línea para optimizar memoria
+
+**Control de Límites:**
+```go
+type BatchConfig struct {
+    MaxBytes  uint32  // Límite de bytes por batch (8kB por defecto)
+    MaxAmount uint32  // Límite de apuestas por batch (500 por defecto)
+}
+```
+
+**Algoritmo de Construcción de Batches:**
+1. Lee una línea del CSV y la convierte en `Bet`
+2. Estima el tamaño del batch actual + nueva apuesta
+3. Si supera `MaxBytes` o `MaxAmount`, finaliza el batch actual
+4. Si no supera límites, agrega la apuesta y continúa
+
+**Estimación de Tamaño:**
+```go
+func (bm *BatchMaker) estimateBatchSize(bets []protocol.Bet) (uint32, error) {
+    packet, err := protocol.NewBetPacket(bm.clientID, bets)
+    if err != nil {
+        return 0, err
+    }
+    
+    var buf bytes.Buffer
+    if err := packet.Encode(&buf); err != nil {
+        return 0, err
+    }
+    
+    return uint32(buf.Len()) + protocol.HeaderSize, nil
+}
+```
+
+#### Cambios en el Cliente
+
+**Nueva lógica de envío:**
+- Eliminación de variables de entorno para apuestas individuales
+- Reemplazo del loop de mensajes por loop de batches
+- Integración con `BatchMaker` para procesamiento continuo
+
+**Flujo actualizado:**
+```go
+func (c *Client) StartClientLoop() {
+    defer c.cleanup()
+    
+    batchID := 1
+    for {
+        if c.signal.ShouldShutdown() {
+            break
+        }
+
+        bets, err := c.batchMaker.MakeBatch()
+        if err != nil {
+            break
+        }
+        
+        if bets == nil || len(bets) == 0 {
+            break
+        }
+        
+        err = c.sendBetBatch(bets, batchID)
+        if err != nil {
+            break
+        }
+		
+        batchID++
+        time.Sleep(c.config.LoopPeriod)
+    }
+}
+```
+
+#### Cambios en el Servidor
+
+**Procesamiento de Batches:**
+El `BetHandler` se modificó para procesar listas de apuestas:
+
+```python
+def handle(packet: Packet) -> Packet:
+    if not isinstance(packet, BetPacket):
+        return ErrorPacket(ErrorPacket.INVALID_PACKET, "Did not receive correct BetPacket.")
+    
+    agency = packet.agency_id
+    bets: [Bet] = []
+    
+    try:
+        parsed = ProtocolBet.to_domain_list(agency, packet.bets)
+        bets.extend(parsed)
+        store_bets(bets)
+        
+        logging.info(f"action: apuesta_recibida | result: success | cantidad: {len(bets)} | client_id: {agency}")
+        return ReplyPacket(len(bets), "STORED")
+        
+    except Exception as e:
+        logging.error(f"action: apuesta_recibida | result: fail | cantidad: {len(bets)} | client_id: {agency} | error: {e}")
+        return ErrorPacket(ErrorPacket.INVALID_BET, "Invalid Bet batch, could not parse.")
+```
+
+#### Integración con Docker
+
+**Volúmenes de Datos:**
+Se agregaron mounts para los archivos CSV en el script generador:
+
+```python
+def base_client(name: str, client_id: int):
+    return {
+        # ...
+        "volumes": [
+            f"{os.path.abspath(CLIENT_BASE_PATH)}/config.yaml:/config.yaml",
+            f"{os.path.abspath(DATA_BASE_PATH)}/agency-{client_id}.csv:/.data/agency-{client_id}.csv"
+        ],
+        # ...
+    }
+```
+
+**Variables de Entorno Simplificadas:**
+- Eliminación de variables de apuesta individual (`NOMBRE`, `APELLIDO`, etc.)
+- Adición de `CLI_BATCH_MAXBYTES` para configuración dinámica
+
+#### Configuración
+
+Se dejó de utilizar loop.amount, ya que el loop ahora es dictado por el csv de apuestas.
+
+Además, se decidió agregar de manera configurable el máximo de bytes, aun asi se utilice siempre 8KB.
+
+Con respecto al máximo de bytes, se agrego al docker-compose como variable de entorno para conservar compatibilidad con los tests.
+
+**config.yaml actualizado:**
+```yaml
+server:
+  address: "server:12345"
+loop:
+  period: "5s"  # Eliminado loop.amount
+log:
+  level: "INFO"
+batch:
+  maxBytes: 8192   # Límite de 8kB por batch
+  maxAmount: 500   # Máximo 500 apuestas por batch
+```
