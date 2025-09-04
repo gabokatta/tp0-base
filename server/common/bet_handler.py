@@ -78,13 +78,12 @@ class BetHandler:
     def _handle_winners(self, packet: GetWinnersPacket) -> Packet:
         """Handle winners query from agencies."""
         agency = packet.agency_id
-        logging.info(f"action: consulta_ganadores | result: in_progress | client_id: {agency}")
+        ready_count = len(self.ready_agencies)
+        logging.info(f"action: consulta_ganadores | result: in_progress | client_id: {agency} |" +
+                     f" ready_agencies: {ready_count}/{self.agency_amount}")
 
         try:
             if not self.lottery_is_done:
-                ready_count = len(self.ready_agencies)
-                logging.info(f"action: consulta_ganadores | result: lottery_not_ready | client_id: {agency} |" +
-                             f" ready_agencies: {ready_count}/{self.agency_amount}")
                 return ErrorPacket(ErrorPacket.LOTTERY_NOT_DONE, f"Lottery not completed.")
 
             agency_winners = self.winners.get(agency, [])
