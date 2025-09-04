@@ -804,6 +804,12 @@ Se agregaron variables de entorno temporales para las apuestas en el script gene
 
 # Ejercicio Nº6: Procesamiento por Batches
 
+----
+
+<h4 align="center"><a href="https://github.com/gabokatta/tp0-base/compare/ej5...gabokatta:tp0-base:ej6?expand=1">diff - ej5</a></h4>
+
+---
+
 ## Diseño de la Solución
 
 Este ejercicio introdujo el procesamiento por lotes (_batches_) donde los clientes pueden enviar múltiples apuestas en una sola consulta, reduciendo significativamente los tiempos de transmisión y procesamiento. Además, se implementó un **protocolo de sesión completo** con inicio, múltiples batches y finalización.
