@@ -1020,3 +1020,238 @@ batch:
 - **Sin `loop.amount`**: El procesamiento termina cuando se agota el CSV
 - **Configuración de batch**: Límites configurables por bytes y cantidad
 - **Compatibilidad**: Variables de entorno mantenidas para tests
+
+# Ejercicio Nº7: Consulta de Ganadores
+
+----
+
+<h4 align="center"><a href="https://github.com/gabokatta/tp0-base/compare/ej6...gabokatta:tp0-base:ej7?expand=1">diff - ej6</a></h4>
+
+---
+
+## Diseño de la Solución
+
+Este ejercicio extiende el procesamiento por lotes del Ejercicio 6, agregando la funcionalidad de **consulta de ganadores de lotería**. Una vez que todas las agencias terminan de enviar sus apuestas, el servidor realiza el sorteo y los clientes pueden consultar sus ganadores mediante un protocolo de polling con timeout.
+
+## Protocolo de Comunicación Extendido
+
+### Nuevo Flujo Completo de Sesión
+El protocolo ahora incluye una fase adicional de consulta:
+
+1. **BetStartPacket**: Inicia la sesión de apuestas
+2. **BetPacket** (múltiples): Envía batches de apuestas
+3. **BetFinishPacket**: Finaliza la sesión de apuestas
+4. **GetWinnersPacket** (polling): Consulta ganadores hasta obtener resultados
+
+### Nuevos Paquetes de Comunicación
+
+**GetWinnersPacket:**
+```
+- 1 Byte: agency_id (uint8)
+```
+
+**ReplyWinnersPacket:**
+```
+- 1 Byte: agency_id (uint8)
+- 4 Bytes: winner_count (uint32) - cantidad de ganadores
+- N × 4 Bytes: winner_documents (uint32) - números de documento de los ganadores
+```
+
+**ErrorPacket ampliado:**
+```
+Nuevo código de error:
+- ErrLotteryNotDone (0x03): La lotería aún no está lista
+```
+
+### Implementaciones
+
+**Go (Cliente):**
+```go
+type GetWinnersPacket struct {
+    AgencyID uint8
+}
+
+type ReplyWinnersPacket struct {
+    AgencyID uint8
+    Winners  []uint32  // Documentos de los ganadores
+}
+
+// Nuevas constantes
+const (
+    MsgGetWinners   = 0x05
+    MsgReplyWinners = 0x06
+    MsgError        = 0x07  // Movido de 0x05
+    
+    ErrLotteryNotDone = 0x03
+)
+```
+
+**Python (Servidor):**
+```python
+class GetWinnersPacket(Packet):
+    def __init__(self, agency_id: int):
+        self.agency_id: int = agency_id
+
+class ReplyWinnersPacket(Packet):
+    def __init__(self, agency_id: int, winners: [int]):
+        self.agency_id: int = agency_id
+        self.winners: [int] = winners  # Lista de documentos ganadores
+```
+
+## Sistema de Polling de Ganadores (Cliente)
+
+### Configuración de Timeouts
+```yaml
+winners:
+  cooldown: "3s"    # Tiempo entre consultas
+  timeout: "1m"     # Timeout total para obtener ganadores
+```
+
+### Algoritmo de Polling
+```go
+func (c *Client) getWinners() error {
+    timeout := time.Now().Add(c.config.WinnersTimeout)
+    
+    for time.Now().Before(timeout) {
+        // Enviar consulta
+        res, err := c.network.SendWinnersRequest(c.config.ID)
+        
+        // Procesar respuesta
+        winners, lotteryNotDone, err := c.handleWinnersResponse(res)
+        
+        if winners != nil {
+            return nil  // ¡Ganadores obtenidos!
+        }
+        
+        if lotteryNotDone != nil {
+            time.Sleep(c.config.WinnersCooldown)
+            continue  // Reintentar después del cooldown
+        }
+    }
+    
+    return fmt.Errorf("timeout waiting for lottery results")
+}
+```
+
+### Gestión de Conexiones
+- **Una conexión por consulta**: Cada `SendWinnersRequest` abre y cierra una conexión
+- **Evita saturación del servidor**: Cooldown entre consultas
+- **Timeout configurable**: Limita el tiempo total de espera
+
+## Refactorización del Servidor
+
+### BetHandler con Estado de Lotería
+```python
+class BetHandler:
+    def __init__(self, agency_amount):
+        self.agency_amount: int = agency_amount
+        self.lottery_is_done: bool = False
+        self.winners: Dict[int, List[str]] = {}
+        self.ready_agencies: Set[int] = set()
+    
+    def handle(self, packet: Packet) -> Packet:
+        # Router unificado para todos los tipos de paquete
+        if isinstance(packet, BetPacket):
+            return self._handle_bets(packet)
+        elif isinstance(packet, BetFinishPacket):
+            return self._handle_finish(packet)
+        elif isinstance(packet, GetWinnersPacket):
+            return self._handle_winners(packet)
+```
+
+### Algoritmo de Sorteo
+```python
+def _start_lottery(self) -> None:
+    logging.info("action: sorteo | result: in_progress")
+    
+    # Inicializar estructura de ganadores
+    self.winners = {agency_id: [] for agency_id in range(1, self.agency_amount + 1)}
+    
+    # Cargar todas las apuestas y determinar ganadores
+    bets = list(load_bets())
+    for bet in bets:
+        if has_won(bet):  # Lógica de determinación de ganador
+            agency_id = bet.agency
+            self.winners[agency_id].append(bet.document)
+    
+    self.lottery_is_done = True
+    logging.info("action: sorteo | result: success")
+```
+
+## Refactorización de Arquitectura
+
+### SessionHandler Separado
+```python
+class SessionHandler:
+    def __init__(self, bet_handler: BetHandler):
+        self.bet_handler = bet_handler
+        self.session_id: Optional[int] = None
+        self.is_active = False
+    
+    def handle_packet(self, packet: Packet) -> Packet:
+        # Manejo de estado de sesión y routing
+        if isinstance(packet, GetWinnersPacket):
+            return self.bet_handler.handle(packet)  # Sin sesión requerida
+            
+        # Validaciones de sesión para otros paquetes...
+```
+
+### Network con Graceful Shutdown
+
+Para mejorar la responsiveness de los clientes ante señales de apagado, el shutdown se chequea en los metodos de network, permitiendo un rápido cerrado de recursos.
+
+```go
+func (n *Network) recvExact(nBytes int) ([]byte, error) {
+    for bytesRead < nBytes {
+        if n.signal.ShouldShutdown() {
+            return nil, fmt.Errorf("operation cancelled due to shutdown signal")
+        }
+        // ... leer datos
+    }
+}
+```
+
+## Configuración y Despliegue
+
+### Variables de Entorno Añadidas
+```python
+# En build_compose.py
+def base_server(clients: int):
+    return {
+        "environment": [
+            "PYTHONUNBUFFERED=1",
+            f"AGENCY_AMOUNT={clients}"  # Nuevo: cantidad total de agencias
+        ],
+    }
+
+def base_client(name: str, client_id: int):
+    return {
+        "environment": [
+            f"CLI_WINNERS_COOLDOWN=3s",   # Nuevo: cooldown entre consultas
+            f"CLI_WINNERS_TIMEOUT=1m",    # Nuevo: timeout total
+        ],
+    }
+```
+
+### Configuración Actualizada
+```yaml
+# config.yaml (cliente)
+winners:
+  cooldown: "3s"    # Tiempo entre consultas de ganadores
+  timeout: "1m"     # Timeout máximo para obtener resultados
+```
+
+## Flujo Completo del Sistema
+
+### Flujo del Cliente
+1. **Inicio**: Envía `BetStartPacket`
+2. **Apuestas**: Envía múltiples `BetPacket` con lotes de apuestas
+3. **Finalización**: Envía `BetFinishPacket`
+4. **Polling**: Consulta ganadores con `GetWinnersPacket` hasta obtener resultados o timeout
+
+### Flujo del Servidor
+1. **Recepción**: Acepta sesiones de apuesta de múltiples agencias
+2. **Almacenamiento**: Guarda apuestas de cada agencia
+3. **Sincronización**: Cuenta agencias que terminaron de apostar
+4. **Sorteo**: Una vez que todas las agencias finalizan, calcula ganadores
+5. **Consultas**: Responde consultas de ganadores de cada agencia
