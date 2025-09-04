@@ -1280,8 +1280,15 @@ Este ejercicio transforma el servidor de secuencial a **concurrente**, permitien
 
 ## Arquitectura Concurrente
 
+Justificación del Uso de Threading
+
+- Se eligió threading sobre alternativas como `multiprocessing` o `asyncio` porque el servidor del TP en la gran mayoría del tiempo está ocupado con operaciones de red (recv(), write()) o sincronización, por lo tanto, las limitaciones impuestas por el G.I.L de Python pierden relevancia al poder intercalar de manera frecuente el share de cada thread.
+- Teniendo en cuenta los datos que formar parte de la "sección crítica" de este proyecto, la librería de threading cuenta con todos los mecanismos simples para asegurar la sincronización entre threads.
+
 ### Modelo de Threading
 El servidor ahora utiliza un **thread por cliente**:
+
+Es notable el hecho de colocar el modo `daemon` en falso, esto se realizó con un objetivo didáctico para demostrar que el trabajo logra cerrar de manera correcta todos sus recursos.
 
 ```python
 def run(self):
@@ -1309,6 +1316,12 @@ def run(self):
 ## Sistema de Sincronización
 
 ### Condition Variables para Sorteo
+
+Para el acceso correcto a los recursos de manera sincronizada, estamos utilizando:
+
+- Condition Variables
+- Locks
+
 ```python
 def __init__(self, agency_amount, thread_shutdown: threading.Event):
     self.lottery_var = threading.Condition()  # Para sincronizar el sorteo
@@ -1317,6 +1330,10 @@ def __init__(self, agency_amount, thread_shutdown: threading.Event):
 ```
 
 ### Protocolo de Espera Activa
+
+Cuando un cliente esta en la etapa de pedir los ganadores, el mismo debe primero hacer uso de la condition variable de la lotería, si aun no está lista, queda esperando la señal de la misma.
+Ahora es posible tener esta integración ya que los clientes no estan bloqueandose unos a otros.
+
 ```python
 def _handle_winners(self, packet: GetWinnersPacket) -> Packet:
     with self.lottery_var:
@@ -1330,6 +1347,11 @@ def _handle_winners(self, packet: GetWinnersPacket) -> Packet:
 ```
 
 ### Notificación de Sorteo Completado
+
+Cuando el último cliente necesario llega a finalizar su batch, es este el encargado de ejecutar la loteria, una vez se hace esto,
+el mismo cliente hace uso de la variable de condición para despertar al resto de los clientes que pueden estar durmiendo esperando por
+los ganadores.
+
 ```python
 def _handle_finish(self, packet: BetFinishPacket) -> Packet:
     with self.lottery_var:
@@ -1344,6 +1366,8 @@ def _handle_finish(self, packet: BetFinishPacket) -> Packet:
 
 Ya que no podemos tocar las funciones de la cátedra, decidí hacer wrappers sobre la sección crítica de los archivos para
 evitar lecturas y/o escrituras incorrectas de las apuestas.
+
+De esta manera cuando algun cliente necesite hacer operaciones con los CSV si o si debe esperar su turno y no pisar el trabajo de otro.
 
 ### File Locking
 ```python
@@ -1413,6 +1437,10 @@ def shutdown(self):
 ```
 
 ### Cleanup de Threads Activos
+
+Nuevamente, ademas de no usar los threads en modo Daemon (no impiden al server irse) forzamos a que si o si se tengan que cerrar los recursos
+e incluso no le asignamos un timeout al join de cada thread, confiamos en el debido cerrado de todos los FDs.
+
 ```python
 def _cleanup(self):
     with self._threads_lock:

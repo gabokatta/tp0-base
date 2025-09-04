@@ -19,10 +19,10 @@ class BetHandler:
         self.lottery_is_done: bool = False
         self.winners: Dict[int, List[str]] = {}
         self.ready_agencies: Set[int] = set()
+        self.thread_shutdown = thread_shutdown
 
         # para sincronizar
         self.lottery_var = threading.Condition()
-        self.thread_shutdown = thread_shutdown
         self._file_lock = threading.Lock()
 
     def handle(self, packet: Packet) -> Packet:
@@ -54,6 +54,7 @@ class BetHandler:
             return ErrorPacket(ErrorPacket.INVALID_BET, "Invalid Bet batch, could not parse.")
 
         try:
+            #  Accedemos a sección crítica de CSV usando un wrapper que pide un lock y lo suelta al terminar de operar.
             self._locked_store_bets(parsed_bets)
             logging.info(f"action: apuesta_recibida | result: success | cantidad: {len(parsed_bets)} |" +
                          f" client_id: {agency}")
@@ -69,15 +70,13 @@ class BetHandler:
         logging.info(f"action: finish_ack | result: in_progress | client_id: {agency}")
         try:
             with self.lottery_var:
-                self.ready_agencies.add(agency)
+                self.ready_agencies.add(agency)  # estado compartido modificado usando el RLOCK de la condVar.
+                if self._should_start_lottery():
+                    self._start_lottery()   # Déja cargado los ganadores y queda como read-only. (atómico)
+                    self.lottery_var.notify_all()   # despierta a todos los que están esperando ganadores.
                 logging.info(f"action: finish_ack | result: success | client_id: {agency} |" +
                              f" ready_count: {len(self.ready_agencies)}/{self.agency_amount}")
-
-                if self._should_start_lottery():
-                    self._start_lottery()
-                    self.lottery_var.notify_all()
-
-                return ReplyPacket(len(self.ready_agencies), f"Agency {agency} registered as ready")
+            return ReplyPacket(len(self.ready_agencies), f"Agency {agency} registered as ready")
         except Exception as e:
             logging.error(f"action: finish_ack | result: fail | client_id: {agency} | error: {e}")
             return ErrorPacket(ErrorPacket.INVALID_PACKET, "Internal server error processing finish notification")
@@ -85,41 +84,37 @@ class BetHandler:
     def _handle_winners(self, packet: GetWinnersPacket) -> Packet:
         """Handle winners query from agencies."""
         agency = packet.agency_id
-
-        with self.lottery_var:
-            ready_count = len(self.ready_agencies)
-            logging.info(f"action: winner_request | result: in_progress | client_id: {agency} |" +
-                         f" ready_agencies: {ready_count}/{self.agency_amount}")
-
-            try:
-                if not self.lottery_is_done:
+        try:
+            with self.lottery_var:
+                if not self.lottery_is_done:    # estado compartido leído usando el RLOCK de la condVar.
                     self.lottery_var.wait()
 
-                if self.thread_shutdown.is_set():
+                if self.thread_shutdown.is_set():   # si fuimos despertados pero el shutdown esta encendido, nos vamos.
                     logging.info(f"action: winner_request | result: fail | client_id: {agency}")
                     return ErrorPacket(ErrorPacket.INVALID_PACKET, "Server shutting down")
-
-                agency_winners = self.winners.get(agency, [])
-                logging.info(f"action: winner_request | result: success | client_id: {agency} |" +
-                             f" winner_count: {len(agency_winners)}")
-
-                winner_documents = [int(doc) for doc in agency_winners]
-                return ReplyWinnersPacket(agency, winner_documents)
-
-            except ValueError as e:
-                logging.error(f"action: winner_request | result: fail | client_id: {agency} |" +
-                              f" error: document_conversion | details: {e}")
-                return ErrorPacket(ErrorPacket.INVALID_PACKET, "Error converting winner documents")
-            except Exception as e:
-                logging.error(f"action: winner_request | result: fail | client_id: {agency} | error: {e}")
-                return ErrorPacket(ErrorPacket.INVALID_PACKET, "Internal server error processing winners query")
+            #   esta operación se vuelve read-only de un mapa inmutable.
+            agency_winners = self.winners.get(agency, [])
+            logging.info(f"action: winner_request | result: success | client_id: {agency} |" +
+                         f" winner_count: {len(agency_winners)}")
+            return ReplyWinnersPacket(agency, [int(doc) for doc in agency_winners])
+        except ValueError as e:
+            logging.error(f"action: winner_request | result: fail | client_id: {agency} |" +
+                          f" error: document_conversion | details: {e}")
+            return ErrorPacket(ErrorPacket.INVALID_PACKET, "Error converting winner documents")
+        except Exception as e:
+            logging.error(f"action: winner_request | result: fail | client_id: {agency} | error: {e}")
+            return ErrorPacket(ErrorPacket.INVALID_PACKET, "Internal server error processing winners query")
 
     def _should_start_lottery(self) -> bool:
-        """Check if conditions are met to start the lottery."""
-        return len(self.ready_agencies) == self.agency_amount and not self.lottery_is_done
+        """Check if all agencies finished and lottery hasn't started yet."""
+        all_agencies_ready = len(self.ready_agencies) == self.agency_amount
+        return all_agencies_ready and not self.lottery_is_done
 
     def _start_lottery(self) -> None:
-        """Perform the lottery calculation and cache results."""
+        """
+        Perform lottery calculation. Called only when all agencies are ready.
+        After completion, self.winners becomes immutable and self.lottery_is_done = True.
+        """
         logging.info("action: sorteo | result: in_progress")
         try:
             self.winners = {agency_id: [] for agency_id in range(1, self.agency_amount + 1)}
