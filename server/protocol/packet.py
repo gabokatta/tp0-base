@@ -267,12 +267,10 @@ class ErrorPacket(Packet):
 
     INVALID_PACKET = 0x01
     INVALID_BET = 0x02
-    LOTTERY_NOT_DONE = 0x03
 
     CODES = {
         INVALID_PACKET: "BAD_PACKET",
-        INVALID_BET: "BAD_BET",
-        LOTTERY_NOT_DONE: "LOTTERY_NOT_DONE",
+        INVALID_BET: "BAD_BET"
     }
 
     def __init__(self, error_code: int, message: str = ""):

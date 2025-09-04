@@ -1,4 +1,5 @@
 import logging
+import threading
 from typing import Dict, List, Set
 
 from protocol.packet import (Packet, ErrorPacket, BetPacket, ReplyPacket, BetFinishPacket, GetWinnersPacket,
@@ -19,6 +20,10 @@ class BetHandler:
         self.winners: Dict[int, List[str]] = {}
         self.ready_agencies: Set[int] = set()
 
+        # para sincronizar
+        self._lottery_var = threading.Condition()
+        self._file_lock = threading.Lock()
+
     def handle(self, packet: Packet) -> Packet:
         if not packet:
             logging.error("action: handle_packet | result: fail | error: null_packet")
@@ -34,8 +39,7 @@ class BetHandler:
             logging.error(f"action: handle_packet | result: fail | packet_type: {type(packet)} | error: unknown_type")
             return ErrorPacket(ErrorPacket.INVALID_PACKET, "Invalid packet type received.")
 
-    @staticmethod
-    def _handle_bets(packet: BetPacket) -> Packet:
+    def _handle_bets(self, packet: BetPacket) -> Packet:
         """Handle incoming bet packets - store bets and return confirmation."""
         agency = packet.agency_id
         logging.info(f"action: handle_bets | result: in_progress | client_id: {agency}" +
@@ -49,7 +53,7 @@ class BetHandler:
             return ErrorPacket(ErrorPacket.INVALID_BET, "Invalid Bet batch, could not parse.")
 
         try:
-            store_bets(parsed_bets)
+            self._locked_store_bets(parsed_bets)
             logging.info(f"action: apuesta_recibida | result: success | cantidad: {len(parsed_bets)} |" +
                          f" client_id: {agency}")
             return ReplyPacket(len(parsed_bets), "STORED")
@@ -63,14 +67,16 @@ class BetHandler:
         agency = packet.agency_id
         logging.info(f"action: finish_ack | result: in_progress | client_id: {agency}")
         try:
-            self.ready_agencies.add(agency)
-            logging.info(f"action: finish_ack | result: success | client_id: {agency} |" +
-                         f" ready_count: {len(self.ready_agencies)}/{self.agency_amount}")
+            with self._lottery_var:
+                self.ready_agencies.add(agency)
+                logging.info(f"action: finish_ack | result: success | client_id: {agency} |" +
+                             f" ready_count: {len(self.ready_agencies)}/{self.agency_amount}")
 
-            if self._should_start_lottery():
-                self._start_lottery()
+                if self._should_start_lottery():
+                    self._start_lottery()
+                    self._lottery_var.notify_all()
 
-            return ReplyPacket(len(self.ready_agencies), f"Agency {agency} registered as ready")
+                return ReplyPacket(len(self.ready_agencies), f"Agency {agency} registered as ready")
         except Exception as e:
             logging.error(f"action: finish_ack | result: fail | client_id: {agency} | error: {e}")
             return ErrorPacket(ErrorPacket.INVALID_PACKET, "Internal server error processing finish notification")
@@ -78,28 +84,31 @@ class BetHandler:
     def _handle_winners(self, packet: GetWinnersPacket) -> Packet:
         """Handle winners query from agencies."""
         agency = packet.agency_id
-        ready_count = len(self.ready_agencies)
-        logging.info(f"action: winner_request | result: in_progress | client_id: {agency} |" +
-                     f" ready_agencies: {ready_count}/{self.agency_amount}")
 
-        try:
-            if not self.lottery_is_done:
-                return ErrorPacket(ErrorPacket.LOTTERY_NOT_DONE, f"Lottery not completed.")
+        with self._lottery_var:
+            ready_count = len(self.ready_agencies)
+            logging.info(f"action: winner_request | result: in_progress | client_id: {agency} |" +
+                         f" ready_agencies: {ready_count}/{self.agency_amount}")
 
-            agency_winners = self.winners.get(agency, [])
-            logging.info(f"action: winner_request | result: success | client_id: {agency} |" +
-                         f" winner_count: {len(agency_winners)}")
+            try:
+                if not self.lottery_is_done:
+                    logging.info(f"action: winner_request | result: waiting | client_id: {agency}")
+                    self._lottery_var.wait()
 
-            winner_documents = [int(doc) for doc in agency_winners]
-            return ReplyWinnersPacket(agency, winner_documents)
+                agency_winners = self.winners.get(agency, [])
+                logging.info(f"action: winner_request | result: success | client_id: {agency} |" +
+                             f" winner_count: {len(agency_winners)}")
 
-        except ValueError as e:
-            logging.error(f"action: winner_request | result: fail | client_id: {agency} |" +
-                          f" error: document_conversion | details: {e}")
-            return ErrorPacket(ErrorPacket.INVALID_PACKET, "Error converting winner documents")
-        except Exception as e:
-            logging.error(f"action: winner_request | result: fail | client_id: {agency} | error: {e}")
-            return ErrorPacket(ErrorPacket.INVALID_PACKET, "Internal server error processing winners query")
+                winner_documents = [int(doc) for doc in agency_winners]
+                return ReplyWinnersPacket(agency, winner_documents)
+
+            except ValueError as e:
+                logging.error(f"action: winner_request | result: fail | client_id: {agency} |" +
+                              f" error: document_conversion | details: {e}")
+                return ErrorPacket(ErrorPacket.INVALID_PACKET, "Error converting winner documents")
+            except Exception as e:
+                logging.error(f"action: winner_request | result: fail | client_id: {agency} | error: {e}")
+                return ErrorPacket(ErrorPacket.INVALID_PACKET, "Internal server error processing winners query")
 
     def _should_start_lottery(self) -> bool:
         """Check if conditions are met to start the lottery."""
@@ -110,7 +119,7 @@ class BetHandler:
         logging.info("action: sorteo | result: in_progress")
         try:
             self.winners = {agency_id: [] for agency_id in range(1, self.agency_amount + 1)}
-            bets = list(load_bets())
+            bets = list(self._locked_load_bets())
 
             for bet in bets:
                 if has_won(bet):
@@ -123,3 +132,13 @@ class BetHandler:
             logging.error(f"action: sorteo | result: fail | error: {e}")
             self.winners = {}
             raise
+
+    def _locked_store_bets(self, bets):
+        """Thread-safe wrapper for store_bets using file lock."""
+        with self._file_lock:
+            store_bets(bets)
+
+    def _locked_load_bets(self):
+        """Thread-safe wrapper for load_bets using file lock."""
+        with self._file_lock:
+            return list(load_bets())

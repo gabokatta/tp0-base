@@ -24,7 +24,6 @@ const (
 const (
 	ErrInvalidPacket  = 0x01 // Invalid packet structure error
 	ErrInvalidBetData = 0x02 // Invalid bet data error
-	ErrLotteryNotDone = 0x03 // Lottery is not done error
 )
 
 /*
@@ -383,8 +382,6 @@ func ErrorFromPacket(e ErrorPacket) string {
 		return "INVALID_PACKET"
 	case ErrInvalidBetData:
 		return "INVALID_BET"
-	case ErrLotteryNotDone:
-		return "LOTTERY_IN_PROGRESS"
 	default:
 		return "UNKNOWN_ERROR"
 	}

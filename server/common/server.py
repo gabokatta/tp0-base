@@ -1,5 +1,6 @@
 import logging
 import socket
+import threading
 
 from common.bet_handler import BetHandler
 from protocol.packet import ErrorPacket
@@ -16,21 +17,34 @@ class Server:
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
-        self._client_socket = None
         self._bet_service = BetHandler(agency_amount)
+
+        self._active_threads = []
+        self._threads_lock = threading.Lock()
 
     def run(self):
         """
-        Dummy Server loop
+        Concurrent Server loop
 
-        Server that accept a new connections and establishes a
-        communication with a client. After client with communication
-        finishes, servers starts to accept new connections again
+        Server that accepts new connections and creates a thread
+        for each client connection
         """
         while self._alive:
             try:
-                self._client_socket = self.__accept_new_connection()
-                self._handle_client_connection()
+                client_socket = self.__accept_new_connection()
+                if client_socket:
+
+                    client_thread = threading.Thread(
+                        target=self._handle_client_connection,
+                        args=(client_socket,)
+                    )
+                    client_thread.daemon = True
+                    client_thread.start()
+
+                    with self._threads_lock:
+                        self._active_threads.append(client_thread)
+                        self._active_threads = [t for t in self._active_threads if t.is_alive()]
+
             except OSError as e:
                 if self._alive:
                     logging.error(f"action: accept_connection | result: fail | error: {e}")
@@ -45,16 +59,18 @@ class Server:
         Function blocks until a connection to a client is made.
         Then connection created is printed and returned
         """
+        try:
+            # Connection arrived
+            logging.debug('action: accept_connections | result: in_progress')
+            c, addr = self._server_socket.accept()
+            logging.debug(f'action: accept_connections | result: success | ip: {addr[0]}')
+            return c
+        except OSError:
+            return None
 
-        # Connection arrived
-        logging.debug('action: accept_connections | result: in_progress')
-        c, addr = self._server_socket.accept()
-        logging.debug(f'action: accept_connections | result: success | ip: {addr[0]}')
-        return c
-
-    def _handle_client_connection(self):
-        """Handle complete client session."""
-        with self._client_socket as s:
+    def _handle_client_connection(self, client_socket):
+        """Handle complete client session in separate thread."""
+        with client_socket as s:
             try:
                 network = Network(s)
                 session = SessionHandler(self._bet_service)
@@ -78,13 +94,12 @@ class Server:
                 logging.error(f"action: handle_session | result: fail | error: {e}")
 
     def _cleanup(self):
+        with self._threads_lock:
+            active_threads = self._active_threads
 
-        if self._client_socket:
-            try:
-                self._client_socket.close()
-                logging.info('action: client_socket_shutdown | result: success')
-            except OSError as e:
-                logging.error(f'action: client_socket_shutdown | result: fail | error: {e}')
+        for thread in active_threads:
+            if thread.is_alive():
+                thread.join()
 
         if not self._server_socket_closed:
             try:

@@ -172,7 +172,7 @@ func (c *Client) getWinners() error {
 			return err
 		}
 
-		winners, lotteryNotDone, err := c.handleWinnersResponse(res)
+		winners, err := c.handleWinnersResponse(res)
 		if err != nil {
 			log.Errorf("action: send_finish | result: fail | error: %v", err)
 			return err
@@ -182,10 +182,6 @@ func (c *Client) getWinners() error {
 			return nil
 		}
 
-		if lotteryNotDone != nil {
-			time.Sleep(c.config.WinnersCooldown)
-			continue
-		}
 	}
 
 	log.Errorf("action: consulta_ganadores | result: timeout | client_id: %v | timeout: %v",
@@ -240,22 +236,18 @@ func (c *Client) handleFinishResponse(response protocol.Packet) error {
 }
 
 // Given the server response to the winners query, this function takes into account the different packet types in order to act.
-func (c *Client) handleWinnersResponse(response protocol.Packet) (*protocol.ReplyWinnersPacket, *protocol.ErrorPacket, error) {
+func (c *Client) handleWinnersResponse(response protocol.Packet) (*protocol.ReplyWinnersPacket, error) {
 	switch resp := response.(type) {
 	case *protocol.ReplyWinnersPacket:
 		log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %v", len(resp.Winners))
-		return resp, nil, nil
+		return resp, nil
 	case *protocol.ErrorPacket:
-		if resp.ErrorCode == protocol.ErrLotteryNotDone {
-			log.Debugf("action: consulta_ganadores | result: in_progress | client_id: %v | status: lottery_not_ready", c.config.ID)
-			return nil, resp, nil
-		}
 		log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error_code: %v | msg: %v",
 			c.config.ID, protocol.ErrorFromPacket(*resp), resp.Message)
-		return nil, nil, errors.New("server had internal error while calculating winners")
+		return nil, errors.New("server had internal error while calculating winners")
 	default:
 		log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: unknown_response_type", c.config.ID)
-		return nil, nil, errors.New("server responded with an invalid error type")
+		return nil, errors.New("server responded with an invalid error type")
 	}
 }
 
