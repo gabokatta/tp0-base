@@ -79,7 +79,7 @@ class BetHandler:
         """Handle winners query from agencies."""
         agency = packet.agency_id
         ready_count = len(self.ready_agencies)
-        logging.info(f"action: consulta_ganadores | result: in_progress | client_id: {agency} |" +
+        logging.info(f"action: winner_request | result: in_progress | client_id: {agency} |" +
                      f" ready_agencies: {ready_count}/{self.agency_amount}")
 
         try:
@@ -87,18 +87,18 @@ class BetHandler:
                 return ErrorPacket(ErrorPacket.LOTTERY_NOT_DONE, f"Lottery not completed.")
 
             agency_winners = self.winners.get(agency, [])
-            logging.info(f"action: consulta_ganadores | result: success | client_id: {agency} |" +
+            logging.info(f"action: winner_request | result: success | client_id: {agency} |" +
                          f" winner_count: {len(agency_winners)}")
 
             winner_documents = [int(doc) for doc in agency_winners]
             return ReplyWinnersPacket(agency, winner_documents)
 
         except ValueError as e:
-            logging.error(f"action: consulta_ganadores | result: fail | client_id: {agency} |" +
+            logging.error(f"action: winner_request | result: fail | client_id: {agency} |" +
                           f" error: document_conversion | details: {e}")
             return ErrorPacket(ErrorPacket.INVALID_PACKET, "Error converting winner documents")
         except Exception as e:
-            logging.error(f"action: consulta_ganadores | result: fail | client_id: {agency} | error: {e}")
+            logging.error(f"action: winner_request | result: fail | client_id: {agency} | error: {e}")
             return ErrorPacket(ErrorPacket.INVALID_PACKET, "Internal server error processing winners query")
 
     def _should_start_lottery(self) -> bool:

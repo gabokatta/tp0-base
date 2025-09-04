@@ -219,7 +219,7 @@ func (c *Client) handleWinnersResponse(response protocol.Packet) (*protocol.Repl
 		return resp, nil, nil
 	case *protocol.ErrorPacket:
 		if resp.ErrorCode == protocol.ErrLotteryNotDone {
-			log.Debugf("action: consulta_ganadores | result: lottery_not_ready | client_id: %v", c.config.ID)
+			log.Debugf("action: consulta_ganadores | result: in_progress | client_id: %v | status: lottery_not_ready", c.config.ID)
 			return nil, resp, nil
 		}
 		log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error_code: %v | msg: %v",
