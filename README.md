@@ -802,56 +802,84 @@ Se agregaron variables de entorno temporales para las apuestas en el script gene
  - Códigos de error específicos (`INVALID_PACKET`, `INVALID_BET`)
  - Mensajes descriptivos en respuestas de error
 
-## Ejercicio Nº6: Procesamiento por Batches
+# Ejercicio Nº6: Procesamiento por Batches
 
-----
+## Diseño de la Solución
 
-<h4 align="center"><a href="https://github.com/gabokatta/tp0-base/compare/ej5...gabokatta:tp0-base:ej6?expand=1">diff - ej5</a></h4>
+Este ejercicio introdujo el procesamiento por lotes (_batches_) donde los clientes pueden enviar múltiples apuestas en una sola consulta, reduciendo significativamente los tiempos de transmisión y procesamiento. Además, se implementó un **protocolo de sesión completo** con inicio, múltiples batches y finalización.
 
----
+## Protocolo de Comunicación Extendido
 
-### Diseño de la Solución
+### Nuevo Flujo de Sesión
+El protocolo ahora sigue una secuencia de 3 fases:
 
-Este ejercicio introdujo el procesamiento por lotes (_batches_) donde los clientes pueden enviar múltiples apuestas en una sola consulta, reduciendo significativamente los tiempos de transmisión y procesamiento.
+1. **BetStartPacket**: Inicia la sesión de apuestas
+2. **BetPacket** (múltiples): Envía batches de apuestas
+3. **BetFinishPacket**: Finaliza la sesión
 
-#### Cambios en el Protocolo de Comunicación
+### Estructura de Paquetes
 
-**Modificación del BetPacket:**
-El protocolo se extendió para soportar múltiples apuestas por paquete:
-
+**BetStartPacket:**
 ```
-BetPacket estructura actualizada:
 - 1 Byte: agency_id (uint8)
-- 4 Bytes: bet_count (uint32) - Nueva: cantidad de apuestas en el batch
-- N × Bet data: Lista de apuestas (estructura individual sin cambios)
 ```
 
-**Implementación en Go:**
+**BetPacket actualizado:**
+```
+- 1 Byte: agency_id (uint8)
+- 4 Bytes: bet_count (uint32) - cantidad de apuestas en el batch
+- N × Bet data: Lista de apuestas
+```
+
+**BetFinishPacket:**
+```
+- 1 Byte: agency_id (uint8)
+```
+
+### Implementaciones
+
+**Go (Cliente):**
 ```go
+type BetStartPacket struct {
+    AgencyID uint8
+}
+
 type BetPacket struct {
     AgencyID uint8
     Bets     []Bet  // Cambió de Bet único a slice de Bets
 }
+
+type BetFinishPacket struct {
+    AgencyID uint8
+}
 ```
 
-**Implementación en Python:**
+**Python (Servidor):**
 ```python
+class BetStartPacket(Packet):
+    def __init__(self, agency_id: int):
+        self.agency_id: int = agency_id
+
 class BetPacket(Packet):
     def __init__(self, agency_id: int, bets: [ProtocolBet]):
         self.agency_id: int = agency_id
         self.bets: [ProtocolBet] = bets  # Lista de apuestas
+
+class BetFinishPacket(Packet):
+    def __init__(self, agency_id: int):
+        self.agency_id: int = agency_id
 ```
 
-#### Sistema BatchMaker (Cliente)
+## Sistema BatchMaker (Cliente)
 
-Se creó la clase `BatchMaker` en [`batch.go`](client/common/batch.go) que maneja:
+Se creó la clase `BatchMaker` que maneja:
 
-**Carga de Datos:**
-- Lectura directa de archivos CSV desde `.data/agency-{N}.csv`
-- Parser robusto que maneja espacios en blanco y validaciones
+### Carga de Datos
+- Lectura de archivos CSV desde `.data/agency-{N}.csv`
+- Parser robusto con validaciones
 - Procesamiento línea por línea para optimizar memoria
 
-**Control de Límites:**
+### Control de Límites
 ```go
 type BatchConfig struct {
     MaxBytes  uint32  // Límite de bytes por batch (8kB por defecto)
@@ -859,131 +887,136 @@ type BatchConfig struct {
 }
 ```
 
-**Algoritmo de Construcción de Batches:**
-1. Lee una línea del CSV y la convierte en `Bet`
+### Algoritmo de Construcción
+1. Lee líneas del CSV y las convierte en `Bet`
 2. Estima el tamaño del batch actual + nueva apuesta
-3. Si supera `MaxBytes` o `MaxAmount`, finaliza el batch actual
-4. Si no supera límites, agrega la apuesta y continúa
+3. Si supera límites, finaliza el batch actual
+4. Si no supera, agrega la apuesta y continúa
 
-**Estimación de Tamaño:**
-```go
-func (bm *BatchMaker) estimateBatchSize(bets []protocol.Bet) (uint32, error) {
-    packet, err := protocol.NewBetPacket(bm.clientID, bets)
-    if err != nil {
-        return 0, err
-    }
-    
-    var buf bytes.Buffer
-    if err := packet.Encode(&buf); err != nil {
-        return 0, err
-    }
-    
-    return uint32(buf.Len()) + protocol.HeaderSize, nil
-}
-```
+## Cambios en el Cliente
 
-#### Cambios en el Cliente
-
-**Nueva lógica de envío:**
-- Eliminación de variables de entorno para apuestas individuales
-- Reemplazo del loop de mensajes por loop de batches
-- Integración con `BatchMaker` para procesamiento continuo
-
-**Flujo actualizado:**
+### Nuevo Flujo de Cliente
 ```go
 func (c *Client) StartClientLoop() {
     defer c.cleanup()
-    
-    batchID := 1
-    for {
-        if c.signal.ShouldShutdown() {
-            break
-        }
 
-        bets, err := c.batchMaker.MakeBatch()
-        if err != nil {
-            break
-        }
-        
-        if bets == nil || len(bets) == 0 {
-            break
-        }
-        
-        err = c.sendBetBatch(bets, batchID)
-        if err != nil {
-            break
-        }
-		
-        batchID++
-        time.Sleep(c.config.LoopPeriod)
+    // 1. Iniciar sesión
+    if err := c.sendBetStart(); err != nil {
+        return
+    }
+
+    // 2. Enviar batches
+    if err := c.sendBets(); err != nil {
+        return
+    }
+
+    // 3. Finalizar sesión
+    if err := c.sendBetFinish(); err != nil {
+        return
     }
 }
 ```
 
-#### Cambios en el Servidor
+### Métodos de Red
+```go
+// Establece conexión y envía BetStartPacket
+func (n *Network) SendStartBet(clientID string) (Packet, error)
 
-**Procesamiento de Batches:**
-El `BetHandler` se modificó para procesar listas de apuestas:
+// Envía BetPacket con múltiples apuestas
+func (n *Network) SendBetBatch(clientID string, bets []Bet) (Packet, error)
 
-```python
-def handle(packet: Packet) -> Packet:
-    if not isinstance(packet, BetPacket):
-        return ErrorPacket(ErrorPacket.INVALID_PACKET, "Did not receive correct BetPacket.")
-    
-    agency = packet.agency_id
-    bets: [Bet] = []
-    
-    try:
-        parsed = ProtocolBet.to_domain_list(agency, packet.bets)
-        bets.extend(parsed)
-        store_bets(bets)
-        
-        logging.info(f"action: apuesta_recibida | result: success | cantidad: {len(bets)} | client_id: {agency}")
-        return ReplyPacket(len(bets), "STORED")
-        
-    except Exception as e:
-        logging.error(f"action: apuesta_recibida | result: fail | cantidad: {len(bets)} | client_id: {agency} | error: {e}")
-        return ErrorPacket(ErrorPacket.INVALID_BET, "Invalid Bet batch, could not parse.")
+// Envía BetFinishPacket y cierra conexión
+func (n *Network) SendFinishBet(clientID string) (Packet, error)
 ```
 
-#### Integración con Docker
+## Cambios en el Servidor
 
-**Volúmenes de Datos:**
-Se agregaron mounts para los archivos CSV en el script generador:
+### Manejo de Sesiones
+El servidor ahora mantiene estado de sesión por conexión:
 
+```python
+def __handle_client_connection(self):
+    with self._client_socket as s:
+        network = Network(s)
+        session_client_id = None
+        is_active_session = False
+        
+        while True:
+            packet = network.recv()
+            if packet is None:
+                break
+                
+            # Procesar según tipo de paquete y estado de sesión
+            if isinstance(packet, BetStartPacket):
+                # Lógica de inicio de sesión
+            elif isinstance(packet, BetPacket):
+                # Procesar batch si sesión activa
+            elif isinstance(packet, BetFinishPacket):
+                # Finalizar sesión
+                break
+```
+
+### BetHandler Actualizado
+```python
+def handle_bet_batch(self, packet: BetPacket, session_client_id) -> Packet:
+    # Validar que el cliente coincida con la sesión
+    if packet.agency_id != session_client_id:
+        return ErrorPacket(ErrorPacket.INVALID_PACKET, 
+                         "tried to process batch from invalid client.")
+    
+    # Procesar lista de apuestas
+    bets = []
+    parsed = ProtocolBet.to_domain_list(packet.agency_id, packet.bets)
+    bets.extend(parsed)
+    store_bets(bets)
+    
+    return ReplyPacket(len(bets), "STORED")
+
+def handle_bet_finish(self, packet: BetFinishPacket, session_client_id) -> Packet:
+    # Validar cliente y finalizar sesión
+    if packet.agency_id != session_client_id:
+        return ErrorPacket(ErrorPacket.INVALID_PACKET,
+                         "asked to finish from invalid client.")
+    return ReplyPacket(0, "SESSION_FINISHED")
+```
+
+### Validaciones de Sesión
+- **BetStartPacket**: Solo se acepta si no hay sesión activa
+- **BetPacket/BetFinishPacket**: Solo se procesan si hay sesión activa
+- **Validación de Cliente**: El `agency_id` debe coincidir con la sesión
+
+## Integración con Docker
+
+### Volúmenes de Datos
 ```python
 def base_client(name: str, client_id: int):
     return {
-        # ...
         "volumes": [
-            f"{os.path.abspath(CLIENT_BASE_PATH)}/config.yaml:/config.yaml",
-            f"{os.path.abspath(DATA_BASE_PATH)}/agency-{client_id}.csv:/.data/agency-{client_id}.csv"
+            f"{CLIENT_BASE_PATH}/config.yaml:/config.yaml",
+            f"{DATA_BASE_PATH}/agency-{client_id}.csv:/.data/agency-{client_id}.csv"
         ],
-        # ...
     }
 ```
 
-**Variables de Entorno Simplificadas:**
-- Eliminación de variables de apuesta individual (`NOMBRE`, `APELLIDO`, etc.)
-- Adición de `CLI_BATCH_MAXBYTES` para configuración dinámica
+### Variables de Entorno
+- **Eliminadas**: Variables de apuesta individual (`NOMBRE`, `APELLIDO`, etc.)
+- **Agregadas**: `CLI_BATCH_MAXBYTES` para configuración dinámica
+- **Eliminadas**: `loop.amount` (ahora dictado por el CSV)
 
-#### Configuración
+## Configuración
 
-Se dejó de utilizar loop.amount, ya que el loop ahora es dictado por el csv de apuestas.
-
-Además, se decidió agregar de manera configurable el máximo de bytes, aun asi se utilice siempre 8KB.
-
-Con respecto al máximo de bytes, se agrego al docker-compose como variable de entorno para conservar compatibilidad con los tests.
-
-**config.yaml actualizado:**
+### config.yaml Actualizado
 ```yaml
 server:
   address: "server:12345"
-loop:
-  period: "5s"  # Eliminado loop.amount
 log:
   level: "INFO"
 batch:
   maxBytes: 8192   # Límite de 8kB por batch
   maxAmount: 500   # Máximo 500 apuestas por batch
 ```
+
+### Cambios Principales
+- **Sin `loop.amount`**: El procesamiento termina cuando se agota el CSV
+- **Configuración de batch**: Límites configurables por bytes y cantidad
+- **Compatibilidad**: Variables de entorno mantenidas para tests

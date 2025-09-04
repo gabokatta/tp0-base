@@ -3,9 +3,9 @@ package common
 import (
 	"errors"
 	"fmt"
-	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/shutdown"
 	"time"
 
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/shutdown"
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/protocol"
 	"github.com/op/go-logging"
 )
@@ -15,7 +15,6 @@ var log = logging.MustGetLogger("log")
 type ClientConfig struct {
 	ID              string
 	ServerAddress   string
-	LoopPeriod      time.Duration
 	WinnersCooldown time.Duration
 	WinnersTimeout  time.Duration
 }
@@ -59,27 +58,43 @@ func NewClient(clientConfig ClientConfig, batchConfig BatchConfig) (*Client, err
 // Reads the CSV line by line, building a packet of n maximumBytes, when the limit is reached a batch is sent.
 // After all batches were sent, sends a BetFinishPacket to the server.
 // When the server ACKs the finish, the client enters a winner checking loop.
-// Temporary: Since server is not concurrent -> Packet Send means socket disconnect.
 func (c *Client) StartClientLoop() {
 	defer c.cleanup()
 
-	err := c.sendBets()
-	if err != nil {
+	if err := c.sendBetStart(); err != nil {
 		return
 	}
 
-	err = c.sendFinish()
-	if err != nil {
+	if err := c.sendBets(); err != nil {
 		return
 	}
 
-	err = c.getWinners()
-	if err != nil {
+	if err := c.sendBetFinish(); err != nil {
 		return
 	}
+
+    if err = c.getWinners(); err != nil
+    	return
+    }
+
 }
 
-// Loops through all the possible batches and sends them to the server.
+// Sends a bet batch to the server and awaits the confirmation.
+func (c *Client) sendBetStart() error {
+	log.Infof("action: send_batch_start | result: in_progress | client_id: %v",
+		c.config.ID)
+
+	response, err := c.network.SendStartBet(c.config.ID)
+	if err != nil {
+		log.Errorf("action: send_batch_start | result: fail | client_id: %v | error: %v",
+			c.config.ID, err)
+		return err
+	}
+
+	return c.handleStartResponse(response)
+}
+
+// sendBets loops through all the possible batches and sends them to the server.
 func (c *Client) sendBets() error {
 	batchID := 1
 	for {
@@ -107,8 +122,6 @@ func (c *Client) sendBets() error {
 			return err
 		}
 		batchID++
-
-		time.Sleep(c.config.LoopPeriod)
 	}
 	return nil
 }
@@ -129,12 +142,12 @@ func (c *Client) sendSingleBatch(bets []protocol.Bet, batchID int) error {
 }
 
 // Sends the BetFinishPacket to the server and awaits confirmation.
-func (c *Client) sendFinish() error {
-	log.Debugf("action: send_finish | result: in_progress | client_id: %v", c.config.ID)
+func (c *Client) sendBetFinish() error {
+	log.Debugf("action: send_bet_finish | result: in_progress | client_id: %v", c.config.ID)
 
 	res, err := c.network.SendFinishBet(c.config.ID)
 	if err != nil {
-		log.Errorf("action: send_finish | result: fail | error: %v", err)
+		log.Errorf("action: send_bet_finish | result: fail | error: %v", err)
 		return err
 	}
 
@@ -178,6 +191,21 @@ func (c *Client) getWinners() error {
 	log.Errorf("action: consulta_ganadores | result: timeout | client_id: %v | timeout: %v",
 		c.config.ID, c.config.WinnersTimeout)
 	return fmt.Errorf("timeout waiting for lottery results after %v", c.config.WinnersTimeout)
+}
+
+// Given the server response to the finish, this function takes into account the different packet types in order to act.
+func (c *Client) handleStartResponse(response protocol.Packet) error {
+	switch resp := response.(type) {
+	case *protocol.ReplyPacket:
+		log.Infof("action: send_batch_start | result: success")
+		return nil
+	case *protocol.ErrorPacket:
+		log.Infof("action: send_batch_start | result: error | code: %v | msg: %v", protocol.ErrorFromPacket(*resp), resp.Message)
+		return errors.New("server could not successfully acknowledge the BetStartPacket")
+	default:
+		log.Errorf("action: send_batch_start | result: fail | client_id: %v | error: unknown_response_type", c.config.ID)
+		return errors.New("server responded with an invalid error type")
+	}
 }
 
 // Given the server response to the bets, this function takes into account the different packet types in order to act.

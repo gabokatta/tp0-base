@@ -51,18 +51,15 @@ func (n *Network) Disconnect() error {
 	return nil
 }
 
-// SendBetBatch sends a batch of bets to the server and returns the response packet.
-// Creates the BetPacket internally and handles connection lifecycle.
-// After the function closes, the socket is closed (temporary)
-func (n *Network) SendBetBatch(clientID string, bets []Bet) (Packet, error) {
-	defer func() { _ = n.Disconnect() }()
-
-	packet, err := NewBetPacket(clientID, bets)
+// SendStartBet sends the StartBetPacket to initiate a betting session.
+// Establishes connection and sends the start packet.
+func (n *Network) SendStartBet(clientID string) (Packet, error) {
+	packet, err := NewBetStartPacket(clientID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create bet packet: %w", err)
+		return nil, fmt.Errorf("failed to create StartBet packet: %w", err)
 	}
 
-	if err := n.connect(); err != nil {
+	if err := n.Connect(); err != nil {
 		return nil, err
 	}
 
@@ -78,19 +75,16 @@ func (n *Network) SendBetBatch(clientID string, bets []Bet) (Packet, error) {
 	return response, nil
 }
 
-// SendFinishBet sends the FinishBet notification to the server.
-// Creates the BetFinishPacket internally and handles connection lifecycle.
-// After the function closes, the socket is closed (temporary)
-func (n *Network) SendFinishBet(clientID string) (Packet, error) {
-	defer func() { _ = n.Disconnect() }()
-
-	packet, err := NewBetFinishPacket(clientID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create betFinish packet: %w", err)
+// SendBetBatch sends a batch of bets to the server and returns the response packet.
+// Creates the BetPacket internally. Assumes connection is already established.
+func (n *Network) SendBetBatch(clientID string, bets []Bet) (Packet, error) {
+	if n.conn == nil {
+		return nil, fmt.Errorf("connection not established, call SendStartBet() first")
 	}
 
-	if err := n.connect(); err != nil {
-		return nil, err
+	packet, err := NewBetPacket(clientID, bets)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create bet packet: %w", err)
 	}
 
 	if err := n.send(packet); err != nil {
@@ -98,6 +92,32 @@ func (n *Network) SendFinishBet(clientID string) (Packet, error) {
 	}
 
 	response, err := n.recv()
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+// SendFinishBet sends the FinishBet notification to the server.
+// Creates the BetFinishPacket internally. Assumes connection is already established.
+// This closes the betting session
+func (n *Network) SendFinishBet(clientID string) (Packet, error) {
+	defer func() { _ = n.Disconnect() }()
+	if n.conn == nil {
+		return nil, fmt.Errorf("connection not established, call SendStartBet() first")
+	}
+
+	packet, err := NewBetFinishPacket(clientID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create betFinish packet: %w", err)
+	}
+
+	if err := n.send(packet); err != nil {
+		return nil, err
+	}
+
+	response, err := n.Recv()
 	if err != nil {
 		return nil, err
 	}
