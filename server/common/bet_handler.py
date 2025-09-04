@@ -86,12 +86,12 @@ class BetHandler:
         agency = packet.agency_id
         try:
             with self.lottery_var:
-                if not self.lottery_is_done:    # estado compartido leído usando el RLOCK de la condVar.
+                while not self.lottery_is_done:     # estado compartido leído usando el RLOCK de la condVar.
                     self.lottery_var.wait()
-
-                if self.thread_shutdown.is_set():   # si fuimos despertados pero el shutdown esta encendido, nos vamos.
-                    logging.info(f"action: winner_request | result: fail | client_id: {agency}")
-                    return ErrorPacket(ErrorPacket.INVALID_PACKET, "Server shutting down")
+                    # si fuimos despertados pero el shutdown esta encendido, nos vamos.
+                    if self.thread_shutdown.is_set():
+                        logging.info(f"action: winner_request | result: fail | client_id: {agency}")
+                        return ErrorPacket(ErrorPacket.INVALID_PACKET, "Server shutting down")
             #   esta operación se vuelve read-only de un mapa inmutable.
             agency_winners = self.winners.get(agency, [])
             logging.info(f"action: winner_request | result: success | client_id: {agency} |" +
