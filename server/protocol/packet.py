@@ -3,9 +3,11 @@ from common.utils import Bet
 from protocol.data import ProtocolBet
 from protocol.utils import ByteReader, ByteWriter
 
-MSG_BET = 0x01
-MSG_REPLY = 0x02
-MSG_ERROR = 0x03
+MSG_BET_START = 0X01
+MSG_BET = 0x02
+MSG_BET_FINISH = 0X03
+MSG_REPLY = 0x04
+MSG_ERROR = 0x05
 
 
 class Header:
@@ -71,7 +73,9 @@ class Packet(ABC):
         """Based on the header, deserializes it into a concrete Packet object."""
 
         packet_classes = {
+            MSG_BET_START: BetStartPacket,
             MSG_BET: BetPacket,
+            MSG_BET_FINISH: BetFinishPacket,
             MSG_REPLY: ReplyPacket,
             MSG_ERROR: ErrorPacket,
         }
@@ -81,6 +85,54 @@ class Packet(ABC):
             raise ValueError(f"Unknown message type: {header.message_type}")
 
         return packet_class.deserialize_payload(payload)
+
+
+class BetStartPacket(Packet):
+    """
+    Bet Start Packet Payload structure:
+        - 1 Byte: agency_id (uint8) - Identifier for the betting agency
+
+    This packet signals to the server that it should prepare to receive multiple
+    BetPacket messages.
+    """
+
+    def __init__(self, agency_id: int):
+        self.agency_id: int = agency_id
+
+    def get_message_type(self) -> int:
+        return MSG_BET_START
+
+    def serialize_payload(self) -> bytes:
+        raise NotImplementedError("Server has no need to serialize BetStartPacket.")
+
+    @classmethod
+    def deserialize_payload(cls, data: bytes) -> 'BetStartPacket':
+        reader = ByteReader(data)
+        agency_id = reader.read_uint8()
+        return cls(agency_id)
+
+
+class BetFinishPacket(Packet):
+    """
+    BetFinish Packet Payload structure:
+        - 1 Byte: agency_id (uint8) - Identifier for the betting agency
+    This packet signals that an agency has finished sending bets.
+    """
+
+    def __init__(self, agency_id: int):
+        self.agency_id: int = agency_id
+
+    def get_message_type(self) -> int:
+        return MSG_BET_FINISH
+
+    def serialize_payload(self) -> bytes:
+        raise NotImplementedError("Server has no need to serialize BetFinishPacket.")
+
+    @classmethod
+    def deserialize_payload(cls, data: bytes) -> 'BetFinishPacket':
+        reader = ByteReader(data)
+        agency_id = reader.read_uint8()
+        return cls(agency_id)
 
 
 class BetPacket(Packet):

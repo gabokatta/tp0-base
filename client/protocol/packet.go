@@ -11,9 +11,11 @@ import (
 
 // Message type constants for different packet types.
 const (
-	MsgBet   = 0x01 // BetPacket message type
-	MsgReply = 0x02 // ReplyPacket message type
-	MsgError = 0x03 // ErrorPacket message type
+	MsgBetStart  = 0x01 // BetStartPacket message type
+	MsgBet       = 0x02 // BetPacket message type
+	MsgBetFinish = 0x03 // BetFinishPacket message type
+	MsgReply     = 0x04 // ReplyPacket message type
+	MsgError     = 0x05 // ErrorPacket message type
 )
 
 // Error code constants for ErrorPacket.
@@ -100,6 +102,35 @@ func DeserializePayload(messageType uint8, payloadBytes []byte) (Packet, error) 
 }
 
 /*
+BetStartPacket represents an agency message to the server to make it start listening for BetPacket.
+The packet structure is:
+- 1 Byte for agency ID.
+*/
+type BetStartPacket struct {
+	AgencyID uint8
+}
+
+// Type returns the message type identifier for BetStartPacket.
+func (b *BetStartPacket) Type() uint8 { return MsgBetStart }
+
+// Encode serializes the BetStartPacket to an io.Writer.
+func (b *BetStartPacket) Encode(w io.Writer) error {
+	return binary.Write(w, binary.BigEndian, b.AgencyID)
+}
+
+// NewBetStartPacket creates a new BetStartPacket from string agency ID.
+// Returns an error if the agency ID cannot be converted to uint8.
+func NewBetStartPacket(id string) (*BetStartPacket, error) {
+	n, err := strconv.ParseUint(id, 10, 8)
+	if err != nil {
+		return nil, err
+	}
+	return &BetStartPacket{
+		AgencyID: uint8(n),
+	}, nil
+}
+
+/*
 BetPacket represents a bet submission from a client agency.
 
 The packet structure is:
@@ -144,6 +175,35 @@ func NewBetPacket(id string, bets []Bet) (*BetPacket, error) {
 	return &BetPacket{
 		AgencyID: uint8(n),
 		Bets:     bets,
+	}, nil
+}
+
+/*
+BetFinishPacket represents an agency message to the server in order to signal no more bets.
+The packet structure is:
+- 1 Byte for agency ID.
+*/
+type BetFinishPacket struct {
+	AgencyID uint8
+}
+
+// Type returns the message type identifier for BetFinishPacket.
+func (b *BetFinishPacket) Type() uint8 { return MsgBetFinish }
+
+// Encode serializes the BetFinishPacket to an io.Writer.
+func (b *BetFinishPacket) Encode(w io.Writer) error {
+	return binary.Write(w, binary.BigEndian, b.AgencyID)
+}
+
+// NewBetFinishPacket creates a new BetFinishPacket from string agency ID.
+// Returns an error if the agency ID cannot be converted to uint8.
+func NewBetFinishPacket(id string) (*BetFinishPacket, error) {
+	n, err := strconv.ParseUint(id, 10, 8)
+	if err != nil {
+		return nil, err
+	}
+	return &BetFinishPacket{
+		AgencyID: uint8(n),
 	}, nil
 }
 
