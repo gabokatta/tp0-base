@@ -59,6 +59,10 @@ func InitConfig() (*viper.Viper, error) {
 		return nil, errors.Wrapf(err, "Could not parse CLI_WINNERS_COOLDOWN env var as time.Duration.")
 	}
 
+	if _, err := time.ParseDuration(v.GetString("winners.timeout")); err != nil {
+		return nil, errors.Wrapf(err, "Could not parse CLIT_WINNERS_TIMEOUT env var as time.Duration.")
+	}
+
 	return v, nil
 }
 
