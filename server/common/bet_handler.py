@@ -14,14 +14,15 @@ class BetHandler:
     Validates packets, converts to domain objects, and stores using store_bets().
     """
 
-    def __init__(self, agency_amount):
+    def __init__(self, agency_amount, thread_shutdown: threading.Event):
         self.agency_amount: int = agency_amount
         self.lottery_is_done: bool = False
         self.winners: Dict[int, List[str]] = {}
         self.ready_agencies: Set[int] = set()
 
         # para sincronizar
-        self._lottery_var = threading.Condition()
+        self.lottery_var = threading.Condition()
+        self.thread_shutdown = thread_shutdown
         self._file_lock = threading.Lock()
 
     def handle(self, packet: Packet) -> Packet:
@@ -67,14 +68,14 @@ class BetHandler:
         agency = packet.agency_id
         logging.info(f"action: finish_ack | result: in_progress | client_id: {agency}")
         try:
-            with self._lottery_var:
+            with self.lottery_var:
                 self.ready_agencies.add(agency)
                 logging.info(f"action: finish_ack | result: success | client_id: {agency} |" +
                              f" ready_count: {len(self.ready_agencies)}/{self.agency_amount}")
 
                 if self._should_start_lottery():
                     self._start_lottery()
-                    self._lottery_var.notify_all()
+                    self.lottery_var.notify_all()
 
                 return ReplyPacket(len(self.ready_agencies), f"Agency {agency} registered as ready")
         except Exception as e:
@@ -85,14 +86,18 @@ class BetHandler:
         """Handle winners query from agencies."""
         agency = packet.agency_id
 
-        with self._lottery_var:
+        with self.lottery_var:
             ready_count = len(self.ready_agencies)
             logging.info(f"action: winner_request | result: in_progress | client_id: {agency} |" +
                          f" ready_agencies: {ready_count}/{self.agency_amount}")
 
             try:
                 if not self.lottery_is_done:
-                    self._lottery_var.wait()
+                    self.lottery_var.wait()
+
+                if self.thread_shutdown.is_set():
+                    logging.info(f"action: winner_request | result: fail | client_id: {agency}")
+                    return ErrorPacket(ErrorPacket.INVALID_PACKET, "Server shutting down")
 
                 agency_winners = self.winners.get(agency, [])
                 logging.info(f"action: winner_request | result: success | client_id: {agency} |" +

@@ -122,6 +122,7 @@ func (c *Client) sendBets() error {
 			return err
 		}
 		batchID++
+		time.Sleep(150 * time.Millisecond)
 	}
 	return nil
 }
