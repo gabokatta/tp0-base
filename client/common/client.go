@@ -1,6 +1,7 @@
 package common
 
 import (
+	"errors"
 	"os"
 	"time"
 
@@ -69,7 +70,10 @@ func (c *Client) StartClientLoop() {
 				c.config.ID, msgID-1)
 			return
 		}
-		c.sendBet(msgID)
+		err := c.sendBet(msgID)
+		if err != nil {
+			return
+		}
 		time.Sleep(c.config.LoopPeriod)
 	}
 
@@ -79,28 +83,31 @@ func (c *Client) StartClientLoop() {
 
 // This function uses the network to send the packet and logs the error if they exist.
 // After sending the server sends a response and the client handles it.
-func (c *Client) sendBet(iteration int) {
+func (c *Client) sendBet(iteration int) error {
 	log.Debugf("action: send_bet | result: in_progress | client_id: %v | iteration: %v", c.config.ID, iteration)
 	response, err := c.network.SendBet(c.config.ID, *c.bet)
 	if err != nil {
 		log.Errorf("action: send_bet | result: fail | client_id: %v | iteration: %v | dni: %v | error: %v",
 			c.config.ID, iteration, c.bet.Document, err)
-		return
+		return err
 	}
 
-	c.handleResponse(response, *c.bet, iteration)
+	return c.handleResponse(response, *c.bet, iteration)
 }
 
 // Given the server response, this function takes into account the different packet types in order to act.
-func (c *Client) handleResponse(response protocol.Packet, bet protocol.Bet, iteration int) {
+func (c *Client) handleResponse(response protocol.Packet, bet protocol.Bet, iteration int) error {
 	switch resp := response.(type) {
 	case *protocol.ReplyPacket:
 		log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v", bet.Document, bet.Number)
+		return nil
 	case *protocol.ErrorPacket:
 		log.Errorf("action: apuesta_enviada | result: fail | client_id: %v | iteration: %v | dni: %v | numero: %v | error_code: %v | msg: %v",
 			c.config.ID, iteration, bet.Document, bet.Number, protocol.ErrorFromPacket(*resp), resp.Message)
+		return errors.New(resp.Message)
 	default:
 		log.Errorf("action: apuesta_enviada | result: fail | client_id: %v | iteration: %v | error: unknown_response_type", c.config.ID, bet.Number)
+		return errors.New("unknow response from server")
 	}
 }
 
