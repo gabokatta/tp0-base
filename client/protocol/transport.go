@@ -6,6 +6,7 @@ import (
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/shutdown"
 	"io"
 	"net"
+	"time"
 )
 
 // Network handles TCP network communication with the server,
@@ -127,8 +128,8 @@ func (n *Network) SendFinishBet(clientID string) (Packet, error) {
 
 // SendWinnersRequest sends the GetWinnersPacket to the server.
 // Creates the GetWinnersPacket internally and handles connection lifecycle.
-// After the function closes, the socket is closed (temporary)
-func (n *Network) SendWinnersRequest(clientID string) (Packet, error) {
+// The timeout parameters helps avoid waiting forever for the server.
+func (n *Network) SendWinnersRequest(clientID string, timeout time.Duration) (Packet, error) {
 	defer func() { _ = n.Disconnect() }()
 
 	packet, err := NewGetWinnersPacket(clientID)
@@ -138,6 +139,11 @@ func (n *Network) SendWinnersRequest(clientID string) (Packet, error) {
 
 	if err := n.connect(); err != nil {
 		return nil, err
+	}
+
+	deadline := time.Now().Add(timeout)
+	if err := n.conn.SetDeadline(deadline); err != nil {
+		return nil, fmt.Errorf("failed to set connection deadline: %w", err)
 	}
 
 	if err := n.send(packet); err != nil {

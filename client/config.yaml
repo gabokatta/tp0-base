@@ -7,5 +7,4 @@ batch:
   maxBytes: 8192
   maxAmount: 275
 winners:
-  cooldown: "3s"
-  timeout: "1m"
+  timeout: "30s"

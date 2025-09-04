@@ -13,10 +13,9 @@ import (
 var log = logging.MustGetLogger("log")
 
 type ClientConfig struct {
-	ID              string
-	ServerAddress   string
-	WinnersCooldown time.Duration
-	WinnersTimeout  time.Duration
+	ID             string
+	ServerAddress  string
+	WinnersTimeout time.Duration
 }
 
 // Client responsible for managing outgoing connections to the server.
@@ -155,34 +154,28 @@ func (c *Client) sendBetFinish() error {
 	return c.handleFinishResponse(res)
 }
 
-// Starts a connection loop with the server to check if the winners are available.
-// To avoid crowding the server, after a connection the socket is closed.
-// If the reply is a list of winners the loop breaks, if not, we sleep and ask again later.
+// Starts a connection with the server to check if the winners are available.
+// After establishing the connection, the client waits for a server response. (with a timeout)
+// If the reply is a list of winners we return without error.
 // In the case that the server is not able to finish the lottery in WinnersTimeout, we return an error.
 func (c *Client) getWinners() error {
 
 	log.Infof("action: consulta_ganadores | result: in_progress | client_id: %v", c.config.ID)
 
-	timeout := time.Now().Add(c.config.WinnersTimeout)
+	res, err := c.network.SendWinnersRequest(c.config.ID, c.config.WinnersTimeout)
+	if err != nil {
+		log.Errorf("action: send_finish | result: fail | error: %v", err)
+		return err
+	}
 
-	for time.Now().Before(timeout) {
+	winners, err := c.handleWinnersResponse(res)
+	if err != nil {
+		log.Errorf("action: send_finish | result: fail | error: %v", err)
+		return err
+	}
 
-		res, err := c.network.SendWinnersRequest(c.config.ID)
-		if err != nil {
-			log.Errorf("action: send_finish | result: fail | error: %v", err)
-			return err
-		}
-
-		winners, err := c.handleWinnersResponse(res)
-		if err != nil {
-			log.Errorf("action: send_finish | result: fail | error: %v", err)
-			return err
-		}
-
-		if winners != nil {
-			return nil
-		}
-
+	if winners != nil {
+		return nil
 	}
 
 	log.Errorf("action: consulta_ganadores | result: timeout | client_id: %v | timeout: %v",

@@ -36,7 +36,6 @@ func InitConfig() (*viper.Viper, error) {
 	v.BindEnv("server", "address")
 	v.BindEnv("log", "level")
 	v.BindEnv("batch", "maxBytes")
-	v.BindEnv("winners", "cooldown")
 	v.BindEnv("winners", "timeout")
 
 	// Try to read configuration from config file. If config file
@@ -46,10 +45,6 @@ func InitConfig() (*viper.Viper, error) {
 	v.SetConfigFile("./config.yaml")
 	if err := v.ReadInConfig(); err != nil {
 		fmt.Printf("Configuration could not be read from config file. Using env variables instead")
-	}
-
-	if _, err := time.ParseDuration(v.GetString("winners.cooldown")); err != nil {
-		return nil, errors.Wrapf(err, "Could not parse CLI_WINNERS_COOLDOWN env var as time.Duration.")
 	}
 
 	if _, err := time.ParseDuration(v.GetString("winners.timeout")); err != nil {
@@ -85,13 +80,12 @@ func InitLogger(logLevel string) error {
 // For debugging purposes only
 func PrintConfig(v *viper.Viper) {
 	log.Infof("action: config | result: success | client_id: %s | server_address: %s |"+
-		" log_level: %s | batch_bytes: %v | batch_amount: %v | winners_cooldown: %v | winners_timeout: %v",
+		" log_level: %s | batch_bytes: %v | batch_amount: %v | winners_timeout: %v",
 		v.GetString("id"),
 		v.GetString("server.address"),
 		v.GetString("log.level"),
 		v.GetUint32("batch.maxBytes"),
 		v.GetUint32("batch.maxAmount"),
-		v.GetDuration("winners.cooldown"),
 		v.GetDuration("winners.timeout"),
 	)
 }
@@ -110,10 +104,9 @@ func main() {
 	PrintConfig(v)
 
 	clientConfig := common.ClientConfig{
-		ServerAddress: v.GetString("server.address"),
-		ID:            v.GetString("id"),
-		WinnersCooldown: v.GetDuration("winners.cooldown"),
-		WinnersTimeout:  v.GetDuration("winners.timeout"),
+		ServerAddress:  v.GetString("server.address"),
+		ID:             v.GetString("id"),
+		WinnersTimeout: v.GetDuration("winners.timeout"),
 	}
 
 	batchConfig := common.BatchConfig{
