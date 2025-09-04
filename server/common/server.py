@@ -64,7 +64,7 @@ class Server:
                 session_client_id = None
                 is_active_session = False
 
-                while True:
+                while self._alive:
                     packet = network.recv()
                     if packet is None:
                         break
