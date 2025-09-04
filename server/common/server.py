@@ -59,7 +59,7 @@ class Server:
                 network = Network(s)
                 session = SessionHandler(self._bet_service)
 
-                while True:
+                while self._alive:
                     packet = network.recv()
                     if packet is None:
                         break
