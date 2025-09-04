@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/shutdown"
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/protocol"
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/shutdown"
 	"github.com/op/go-logging"
 )
 
@@ -73,9 +73,9 @@ func (c *Client) StartClientLoop() {
 		return
 	}
 
-    if err = c.getWinners(); err != nil
-    	return
-    }
+	if err := c.getWinners(); err != nil {
+		return
+	}
 
 }
 

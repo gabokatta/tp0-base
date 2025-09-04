@@ -59,7 +59,7 @@ func (n *Network) SendStartBet(clientID string) (Packet, error) {
 		return nil, fmt.Errorf("failed to create StartBet packet: %w", err)
 	}
 
-	if err := n.Connect(); err != nil {
+	if err := n.connect(); err != nil {
 		return nil, err
 	}
 
@@ -117,7 +117,7 @@ func (n *Network) SendFinishBet(clientID string) (Packet, error) {
 		return nil, err
 	}
 
-	response, err := n.Recv()
+	response, err := n.recv()
 	if err != nil {
 		return nil, err
 	}

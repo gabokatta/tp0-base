@@ -2,8 +2,9 @@ import logging
 import socket
 
 from common.bet_handler import BetHandler
-from protocol.packet import BetStartPacket, BetFinishPacket, BetPacket, ErrorPacket, ReplyPacket, Packet
+from protocol.packet import ErrorPacket
 from protocol.transport import Network
+from common.session import SessionHandler
 
 
 class Server:
@@ -29,7 +30,7 @@ class Server:
         while self._alive:
             try:
                 self._client_socket = self.__accept_new_connection()
-                self.__handle_client_connection()
+                self._handle_client_connection()
             except OSError as e:
                 if self._alive:
                     logging.error(f"action: accept_connection | result: fail | error: {e}")
@@ -51,62 +52,30 @@ class Server:
         logging.debug(f'action: accept_connections | result: success | ip: {addr[0]}')
         return c
 
-    def __handle_client_connection(self):
-        """
-        Read message from a specific client socket and closes the socket
-
-        If a problem arises in the communication with the client, the
-        client socket will also be closed
-        """
+    def _handle_client_connection(self):
+        """Handle complete client session."""
         with self._client_socket as s:
             try:
                 network = Network(s)
-                session_client_id = None
-                is_active_session = False
+                session = SessionHandler(self._bet_service)
 
                 while True:
                     packet = network.recv()
                     if packet is None:
                         break
-                    if isinstance(packet, BetStartPacket):
-                        if is_active_session:
-                            logging.warning(f"action: receive_start | result: fail | error: session_already_active")
-                            network.send(ErrorPacket(ErrorPacket.INVALID_PACKET, "Session already active"))
-                        else:
-                            is_active_session = True
-                            session_client_id = packet.agency_id
-                            network.send(ReplyPacket(0, "session_active"))
-                    elif isinstance(packet, BetPacket):
-                        response = self._process_bet_packet(packet, is_active_session, session_client_id)
-                        network.send(response)
-                    elif isinstance(packet, BetFinishPacket):
-                        response = self._process_finish_packet(packet, is_active_session, session_client_id)
-                        network.send(response)
-                    else:
-                        logging.warning(f"action: receive_message | result: fail | error: unknown_packet_type")
-                        response = ErrorPacket(ErrorPacket.INVALID_PACKET, f"Unknown packet type")
-                        network.send(response)
+
+                    logging.debug(f"action: receive_message | result: in_progress | ip: {s.getpeername()}")
+
+                    response = session.handle_packet(packet)
+                    network.send(response)
+
+                    if isinstance(response, ErrorPacket) and response.error_code == ErrorPacket.INVALID_PACKET:
                         break
+
             except ConnectionError as e:
                 logging.error(f"action: receive_message | result: fail | error: {e}")
             except Exception as e:
                 logging.error(f"action: handle_session | result: fail | error: {e}")
-
-    def _process_bet_packet(self, packet, session_active, session_client_id) -> Packet:
-        """Process BetPacket logic."""
-        if not session_active:
-            logging.warning(f"action: receive_bet | result: fail | error: session_not_started")
-            return ErrorPacket(ErrorPacket.INVALID_PACKET, "Session not started")
-        else:
-            return self._bet_service.handle_bet_batch(packet, session_client_id)
-
-    def _process_finish_packet(self, packet, session_active, session_client_id):
-        """Process BetFinishPacket logic."""
-        if not session_active:
-            logging.warning(f"action: receive_finish | result: fail | error: session_not_started")
-            return ErrorPacket(ErrorPacket.INVALID_PACKET, "Session not started")
-        else:
-            return self._bet_service.handle_bet_finish(packet, session_client_id)
 
     def _cleanup(self):
 

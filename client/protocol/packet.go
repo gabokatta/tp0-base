@@ -11,13 +11,13 @@ import (
 
 // Message type constants for different packet types.
 const (
-	MsgBetStart  = 0x01 // BetStartPacket message type
-	MsgBet       = 0x02 // BetPacket message type
-	MsgBetFinish = 0x03 // BetFinishPacket message type
-	MsgReply     = 0x04 // ReplyPacket message type
+	MsgBetStart     = 0x01 // BetStartPacket message type
+	MsgBet          = 0x02 // BetPacket message type
+	MsgBetFinish    = 0x03 // BetFinishPacket message type
+	MsgReply        = 0x04 // ReplyPacket message type
 	MsgGetWinners   = 0x05 // GetWinnersPacket message type
-    MsgReplyWinners = 0x06 // ReplyWinnersPacket message type
-	MsgError     = 0x07 // ErrorPacket message type
+	MsgReplyWinners = 0x06 // ReplyWinnersPacket message type
+	MsgError        = 0x07 // ErrorPacket message type
 )
 
 // Error code constants for ErrorPacket.
@@ -253,6 +253,82 @@ func DecodeReplyPacket(r io.Reader) (*ReplyPacket, error) {
 	return &ReplyPacket{
 		DoneCount: doneCount,
 		Message:   string(msgBytes),
+	}, nil
+}
+
+/*
+GetWinnersPacket represents an agency message to the server in order to query its winners.
+
+The packet structure is:
+- 1 Byte for agency ID.
+*/
+type GetWinnersPacket struct {
+	AgencyID uint8
+}
+
+// Type returns the message type identifier for GetWinnersPacket.
+func (g *GetWinnersPacket) Type() uint8 { return MsgGetWinners }
+
+// Encode serializes the GetWinnersPacket to an io.Writer.
+func (g *GetWinnersPacket) Encode(w io.Writer) error {
+	return binary.Write(w, binary.BigEndian, g.AgencyID)
+}
+
+// NewGetWinnersPacket creates a new GetWinnersPacket from string agency ID.
+// Returns an error if the agency ID cannot be converted to uint8.
+func NewGetWinnersPacket(id string) (*GetWinnersPacket, error) {
+	n, err := strconv.ParseUint(id, 10, 8)
+	if err != nil {
+		return nil, err
+	}
+	return &GetWinnersPacket{
+		AgencyID: uint8(n),
+	}, nil
+}
+
+/*
+ReplyWinnersPacket represents a server response to a client request for winners.
+
+The packet structure is:
+- 1 Byte for AgencyID
+- 4 Bytes for amount of winners
+- N * 4 Bytes for all the winner document numbers (uint32, big-endian)
+*/
+type ReplyWinnersPacket struct {
+	AgencyID uint8
+	Winners  []uint32
+}
+
+// Type returns the message type identifier for ReplyWinnersPacket.
+func (r *ReplyWinnersPacket) Type() uint8 { return MsgReplyWinners }
+
+// Encode serializes the ReplyWinnersPacket to an io.Writer.
+func (r *ReplyWinnersPacket) Encode(_ io.Writer) error {
+	return errors.New("client has no need to send ReplyWinnersPacket")
+}
+
+// DecodeReplyWinnersPacket deserializes a ReplyWinnersPacket from an io.Reader.
+func DecodeReplyWinnersPacket(r io.Reader) (*ReplyWinnersPacket, error) {
+	var agencyID uint8
+	if err := binary.Read(r, binary.BigEndian, &agencyID); err != nil {
+		return nil, fmt.Errorf("reading agency ID: %w", err)
+	}
+
+	var winnerCount uint32
+	if err := binary.Read(r, binary.BigEndian, &winnerCount); err != nil {
+		return nil, fmt.Errorf("reading winner count: %w", err)
+	}
+
+	winners := make([]uint32, winnerCount)
+	for i := uint32(0); i < winnerCount; i++ {
+		if err := binary.Read(r, binary.BigEndian, &winners[i]); err != nil {
+			return nil, fmt.Errorf("reading winner %d: %w", i, err)
+		}
+	}
+
+	return &ReplyWinnersPacket{
+		AgencyID: agencyID,
+		Winners:  winners,
 	}, nil
 }
 
