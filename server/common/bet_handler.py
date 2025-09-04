@@ -92,7 +92,6 @@ class BetHandler:
 
             try:
                 if not self.lottery_is_done:
-                    logging.info(f"action: winner_request | result: waiting | client_id: {agency}")
                     self._lottery_var.wait()
 
                 agency_winners = self.winners.get(agency, [])
