@@ -197,6 +197,10 @@ En esta sección se describirán las decisiones de diseño de cada uno de los ej
 > [!TIP]
 >
 > Los ejercicios en cada una de sus branches pueden ser levantados haciendo uso de los comandos del MAKEFILE original de la catedra.
+> 
+> RECORDAR descomprimir el archivo /.data/dataset.zip  y dejar los archivos en la raiz de dicha carpeta, esto para que el servidor y clientes puedan ser levantado mediante:
+> 
+> - ```make docker-compose-up && make docker-compose-logs```
 
 ## Ejercicio N°1: Script para generar DockerCompose
 
@@ -1261,3 +1265,199 @@ winners:
 3. **Sincronización**: Cuenta agencias que terminaron de apostar
 4. **Sorteo**: Una vez que todas las agencias finalizan, calcula ganadores
 5. **Consultas**: Responde consultas de ganadores de cada agencia
+
+# Ejercicio Nº8: Servidor Concurrente
+
+----
+
+<h4 align="center"><a href="https://github.com/gabokatta/tp0-base/compare/ej7...gabokatta:tp0-base:ej8?expand=1">diff - ej7</a></h4>
+
+---
+
+## Diseño de la Solución
+
+Este ejercicio transforma el servidor de secuencial a **concurrente**, permitiendo que múltiples clientes se conecten simultáneamente. Se implementa un sistema de sincronización basado en **threading** para manejar el estado compartido del sorteo y garantizar la consistencia de datos entre threads.
+
+## Arquitectura Concurrente
+
+### Modelo de Threading
+El servidor ahora utiliza un **thread por cliente**:
+
+```python
+def run(self):
+    """Concurrent Server loop"""
+    while self._alive:
+        try:
+            client_socket = self.__accept_new_connection()
+            if client_socket:
+                client_thread = threading.Thread(
+                    target=self._handle_client_connection,
+                    args=(client_socket,)
+                )
+                client_thread.daemon = False   - para el buen manejo de cerrado de recursos
+                client_thread.start()
+                
+                with self._threads_lock:
+                    self._active_threads.append(client_thread)
+                    self._active_threads = [t for t in self._active_threads if t.is_alive()]
+```
+
+### Gestión de Conexiones Persistentes
+- **Conexiones largas**: Los clientes mantienen la conexión abierta para consultar ganadores
+- **Cleanup automático**: Threads zombie se eliminan automáticamente de la lista activa
+
+## Sistema de Sincronización
+
+### Condition Variables para Sorteo
+```python
+def __init__(self, agency_amount, thread_shutdown: threading.Event):
+    self.lottery_var = threading.Condition()  # Para sincronizar el sorteo
+    self.thread_shutdown = thread_shutdown
+    self._file_lock = threading.Lock()        # Para acceso a archivos
+```
+
+### Protocolo de Espera Activa
+```python
+def _handle_winners(self, packet: GetWinnersPacket) -> Packet:
+    with self.lottery_var:
+        if not self.lottery_is_done:
+            self.lottery_var.wait()  # Bloquea hasta que termine el sorteo
+            
+        if self.thread_shutdown.is_set():
+            return ErrorPacket(ErrorPacket.INVALID_PACKET, "Server shutting down")
+            
+        # Retornar ganadores...
+```
+
+### Notificación de Sorteo Completado
+```python
+def _handle_finish(self, packet: BetFinishPacket) -> Packet:
+    with self.lottery_var:
+        self.ready_agencies.add(agency)
+        
+        if self._should_start_lottery():
+            self._start_lottery()
+            self.lottery_var.notify_all()  # Despierta a todos los threads esperando
+```
+
+## Thread Safety
+
+Ya que no podemos tocar las funciones de la cátedra, decidí hacer wrappers sobre la sección crítica de los archivos para
+evitar lecturas y/o escrituras incorrectas de las apuestas.
+
+### File Locking
+```python
+def _locked_store_bets(self, bets):
+    """Thread-safe wrapper for store_bets using file lock."""
+    with self._file_lock:
+        store_bets(bets)
+
+def _locked_load_bets(self):
+    """Thread-safe wrapper for load_bets using file lock."""
+    with self._file_lock:
+        return list(load_bets())
+```
+
+### Estado Compartido Protegido
+- **`lottery_var`**: Condition para sincronizar el sorteo
+- **`ready_agencies`**: Set protegido por la condition
+- **`winners`**: Dict actualizado atómicamente durante el sorteo
+- **`_file_lock`**: Mutex para operaciones de I/O
+
+## Simplificación del Protocolo
+
+### Eliminación del Polling
+Con el servidor concurrente ya no es necesario el sistema de polling:
+
+```yaml
+# config.yaml - Configuración simplificada
+winners:
+  timeout: "30s"  # Solo timeout, no cooldown
+```
+
+### Manejo Directo de Timeouts
+```go
+// Cliente usa timeout directo en el socket
+func (n *Network) SendWinnersRequest(clientID string, timeout time.Duration) (Packet, error) {
+    // ... conexión ...
+    
+    deadline := time.Now().Add(timeout)
+    if err := n.conn.SetDeadline(deadline); err != nil {
+        return nil, fmt.Errorf("failed to set connection deadline: %w", err)
+    }
+    
+    // ... envío y recepción ...
+}
+```
+
+### Eliminación de Códigos de Error Obsoletos
+```python
+# Ya no se necesita ErrLotteryNotDone
+CODES = {
+    INVALID_PACKET: "BAD_PACKET",
+    INVALID_BET: "BAD_BET"
+}
+```
+
+## Graceful Shutdown
+
+### Coordinación de Threads
+```python
+def shutdown(self):
+    self._alive = False
+    self._thread_shutdown.set()  # Señal global de parada
+    
+    # Despertar threads esperando el sorteo
+    with self._bet_service.lottery_var:
+        self._bet_service.lottery_var.notify_all()
+```
+
+### Cleanup de Threads Activos
+```python
+def _cleanup(self):
+    with self._threads_lock:
+        active_threads = self._active_threads
+    
+    # Esperar que terminen todos los threads
+    for thread in active_threads:
+        if thread.is_alive():
+            thread.join()
+```
+
+### Verificación de Shutdown en Operaciones
+```python
+def _handle_winners(self, packet: GetWinnersPacket) -> Packet:
+    with self.lottery_var:
+        if not self.lottery_is_done:
+            self.lottery_var.wait()
+        
+        if self.thread_shutdown.is_set():  # Verificar si debemos parar
+            return ErrorPacket(ErrorPacket.INVALID_PACKET, "Server shutting down")
+```
+
+## Flujo de Operación
+
+### Flujo del Cliente (Simplificado)
+1. **Conexión y Apuestas**: Igual que antes
+2. **Finalización**: Envía `BetFinishPacket` y cierra conexión de apuestas
+3. **Consulta de Ganadores**:
+ - Abre nueva conexión
+ - Envía `GetWinnersPacket`
+ - **Espera en el socket** (no polling) hasta recibir ganadores
+ - El timeout del socket evita espera indefinida
+
+### Flujo del Servidor
+1. **Múltiples Conexiones**: Acepta conexiones concurrentes
+2. **Threading por Cliente**: Cada cliente tiene su propio thread
+3. **Sincronización de Sorteo**:
+ - Cuando todas las agencias terminan → inicia sorteo
+ - Los threads esperando ganadores se despiertan automáticamente
+4. **Respuesta Inmediata**: Una vez completado el sorteo, todos los clientes reciben respuesta
+
+El Ejercicio 8 representa un salto significativo en la arquitectura del sistema, transformándolo de un servidor secuencial simple a una aplicación concurrente robusta capaz de manejar múltiples clientes simultáneamente con garantías de thread safety y un protocolo de comunicación simplificado.
+
+## Tests
+
+A continuación adjunto prueba de los tests andando en cada branch.
+
+![Tests pasando](tests.png)
