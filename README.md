@@ -1178,7 +1178,7 @@ def _start_lottery(self) -> None:
     self.winners = {agency_id: [] for agency_id in range(1, self.agency_amount + 1)}
     
     # Cargar todas las apuestas y determinar ganadores
-    bets = list(load_bets())
+    bets = load_bets()
     for bet in bets:
         if has_won(bet):  # Lógica de determinación de ganador
             agency_id = bet.agency
@@ -1379,7 +1379,7 @@ def _locked_store_bets(self, bets):
 def _locked_load_bets(self):
     """Thread-safe wrapper for load_bets using file lock."""
     with self._file_lock:
-        return list(load_bets())
+        return load_bets()
 ```
 
 ### Estado Compartido Protegido

@@ -118,7 +118,7 @@ class BetHandler:
         logging.info("action: sorteo | result: in_progress")
         try:
             self.winners = {agency_id: [] for agency_id in range(1, self.agency_amount + 1)}
-            bets = list(self._locked_load_bets())
+            bets = self._locked_load_bets()
 
             for bet in bets:
                 if has_won(bet):
@@ -140,4 +140,4 @@ class BetHandler:
     def _locked_load_bets(self):
         """Thread-safe wrapper for load_bets using file lock."""
         with self._file_lock:
-            return list(load_bets())
+            return load_bets()
