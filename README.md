@@ -1174,7 +1174,7 @@ def _start_lottery(self) -> None:
     self.winners = {agency_id: [] for agency_id in range(1, self.agency_amount + 1)}
     
     # Cargar todas las apuestas y determinar ganadores
-    bets = list(load_bets())
+    bets = load_bets()
     for bet in bets:
         if has_won(bet):  # Lógica de determinación de ganador
             agency_id = bet.agency

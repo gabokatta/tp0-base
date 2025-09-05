@@ -110,7 +110,7 @@ class BetHandler:
         logging.info("action: sorteo | result: in_progress")
         try:
             self.winners = {agency_id: [] for agency_id in range(1, self.agency_amount + 1)}
-            bets = list(load_bets())
+            bets = load_bets()
 
             for bet in bets:
                 if has_won(bet):
