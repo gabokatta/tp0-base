@@ -1364,8 +1364,8 @@ def _handle_finish(self, packet: BetFinishPacket) -> Packet:
 
 ## Thread Safety
 
-Ya que no podemos tocar las funciones de la cátedra, decidí hacer wrappers sobre la sección crítica de los archivos para
-evitar lecturas y/o escrituras incorrectas de las apuestas.
+Ya que no podemos tocar las funciones de la cátedra, decidí hacer wrappers y locks sobre la sección crítica de los archivos para
+evitar escrituras incorrectas de las apuestas.
 
 De esta manera cuando algun cliente necesite hacer operaciones con los CSV si o si debe esperar su turno y no pisar el trabajo de otro.
 
@@ -1375,11 +1375,17 @@ def _locked_store_bets(self, bets):
     """Thread-safe wrapper for store_bets using file lock."""
     with self._file_lock:
         store_bets(bets)
+```
 
-def _locked_load_bets(self):
-    """Thread-safe wrapper for load_bets using file lock."""
+```python
+    # en la logica de la loteria.
     with self._file_lock:
-        return load_bets()
+        self.winners = {agency_id: [] for agency_id in range(1, self.agency_amount + 1)}
+        bets = load_bets()
+        for bet in bets:
+            if has_won(bet):
+                 agency_id = bet.agency
+                 self.winners[agency_id].append(bet.document)
 ```
 
 ### Estado Compartido Protegido

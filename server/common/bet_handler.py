@@ -117,13 +117,14 @@ class BetHandler:
         """
         logging.info("action: sorteo | result: in_progress")
         try:
-            self.winners = {agency_id: [] for agency_id in range(1, self.agency_amount + 1)}
-            bets = self._locked_load_bets()
 
-            for bet in bets:
-                if has_won(bet):
-                    agency_id = bet.agency
-                    self.winners[agency_id].append(bet.document)
+            with self._file_lock:
+                self.winners = {agency_id: [] for agency_id in range(1, self.agency_amount + 1)}
+                bets = load_bets()
+                for bet in bets:
+                    if has_won(bet):
+                        agency_id = bet.agency
+                        self.winners[agency_id].append(bet.document)
 
             self.lottery_is_done = True
             logging.info("action: sorteo | result: success")
@@ -136,8 +137,3 @@ class BetHandler:
         """Thread-safe wrapper for store_bets using file lock."""
         with self._file_lock:
             store_bets(bets)
-
-    def _locked_load_bets(self):
-        """Thread-safe wrapper for load_bets using file lock."""
-        with self._file_lock:
-            return load_bets()
