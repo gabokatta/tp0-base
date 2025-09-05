@@ -1495,3 +1495,12 @@ El Ejercicio 8 representa un salto significativo en la arquitectura del sistema,
 A continuación adjunto prueba de los tests andando en cada branch.
 
 ![Tests pasando](tests.png)
+
+## Commits POST corrección:
+
+- Se agregan commits a ej7 y ej8 removiendo un `list()` sobre el método de la cátedra `load_bets()`:
+
+Esto ya que causa que un método que originalmente es un generador que lee bet a bet pase a ser una carga total en memoria.
+Ya se corrigió su uso en ambas branches.
+
+- Se modificó la entrega original con estos cambios solicitados por el profesor haciendo un nuevo `make deliver`.
